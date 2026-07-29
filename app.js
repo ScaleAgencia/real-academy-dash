@@ -356,11 +356,14 @@ function renderFunnel(fk){
 function renderFunnelData(fk){
   var fn=FN[fk], cfg=CFG[fk], isTudo=(period==='tudo'), rng=rangeFor(period), prng=prevRange(rng);
   var a=aggFunnel(fn,rng,isTudo), p=aggFunnel(fn,prng,false), days=daysInRange(fn,rng);
-  var est=fn.totals.leadsEst||0;
   var warn=el('fwarn');
-  if(warn){ if(est>0.15*(fn.totals.leads||1)){
-    warn.innerHTML='<div class="warnbar">ℹ <b>'+intf(est)+'</b> dos '+intf(fn.totals.leads)+' leads deste funil estão com <b>data estimada</b> pela ordem de chegada na planilha (o campo “Submitted At” não vem preenchido na origem). Os <b>totais são exatos</b>; a divisão por dia/mês é aproximada (o mês fecha certo, o dia pode variar 1–2). Preenchendo a data desses leads na planilha, fica exato automaticamente.</div>'; }
-    else { warn.innerHTML=''; } }
+  if(warn){ var notes=[];
+    var est=fn.totals.leadsEst||0;
+    if(est>0.15*(fn.totals.leads||1)){ notes.push('ℹ <b>'+intf(est)+'</b> dos '+intf(fn.totals.leads)+' leads deste funil estão com <b>data estimada</b> pela ordem de chegada na planilha (o campo “Submitted At” não vem preenchido na origem). Os <b>totais são exatos</b>; a divisão por dia/mês é aproximada (o mês fecha certo, o dia pode variar 1–2). Preenchendo a data na planilha, fica exato automaticamente.'); }
+    var noCamp=(fn.totals.leads||0)-(fn.totals.attr||0);
+    if(noCamp>0.4*(fn.totals.leads||1)){ notes.push('ℹ <b>'+intf(noCamp)+'</b> dos '+intf(fn.totals.leads)+' leads (<b>'+nf1.format(100*noCamp/(fn.totals.leads||1))+'%</b>) são de meses cujas campanhas <b>não estão na query atual</b> (histórico removido). Contam como lead, mas sem gasto atribuído — então o <b>CPL do “Tudo” fica subestimado</b>. <b>Os períodos recentes (mês/30 dias) estão corretos.</b>'); }
+    warn.innerHTML = notes.length ? notes.map(function(n){return '<div class="warnbar">'+n+'</div>';}).join('') : '';
+  }
   renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p); renderScore(cfg,fn,a);
   renderChartLeads(cfg,days); renderChartCpl(cfg,days); renderDist(cfg,fn);
   renderInsights(cfg,fn,rng,isTudo); renderDaily(cfg,fn,rng); renderTree(cfg,fn,rng,isTudo);
