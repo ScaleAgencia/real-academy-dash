@@ -24,6 +24,7 @@ $TAX          = 1.1385          # imposto Meta (+13,85%) em TODO gasto Meta
 $POPUP_START  = '2026-06-30'    # dia em que o funil Pop-up comecou a captar
 $TYPEFORM_TAG = 'typeform'      # token no nome da campanha = funil Typeform
 $QUALIFIED    = @('A','B','C')  # faixas de capital consideradas "qualificado" (>= R$200k)
+$TODAY        = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('yyyy-MM-dd')
 
 # ---- sources (read-only) --------------------------------------------
 $QUERIES_ID = '1f2sYo1iNC-jzh1nEWfNHYrZN97r8SrTWDuLiZWVRX1o'
@@ -75,6 +76,9 @@ function LDate($s){ $s=Norm $s; if($s -eq ''){return ''}
   if($s -match '^(\d{4})-(\d{2})-(\d{2})'){ return "$($Matches[1])-$($Matches[2])-$($Matches[3])" }
   if($s -match '^(\d{1,2})/(\d{1,2})/(\d{4})'){ return ('{0}-{1:D2}-{2:D2}' -f $Matches[3],[int]$Matches[2],[int]$Matches[1]) }
   return '' }
+$EPOCH=[datetime]'2025-01-01'
+function DToNum($d){ if($d -eq ''){return -1}; return [int](([datetime]::ParseExact($d,'yyyy-MM-dd',$null))-$EPOCH).TotalDays }
+function NumToD($num){ return $EPOCH.AddDays($num).ToString('yyyy-MM-dd') }
 # leads do pop-up vem com o utm DUPLICADO ("<nome> <nome>" - macro Meta {{campaign.name}} renderizada 2x). Desdobra.
 function DeDup($s){ $s=([string]$s).Trim(); $L=$s.Length; if($L -lt 3){ return $s }
   if($L % 2 -eq 1){ $m=($L-1)/2; if($s[$m] -eq ' ' -and $s.Substring(0,$m) -eq $s.Substring($m+1)){ return $s.Substring(0,$m) } }
@@ -106,7 +110,7 @@ function New-Funnel($key,$label,$product,$kind){
     grain=@{}; daily=@{}
     campDe=@{}; setDe=@{}; adDe=@{}; qPair=@{}; qTriple=@{}
     capDist=@{}; expDist=@{}; dispDist=@{}
-    leads=0; leadsDated=0; attr=0
+    leads=0; leadsDated=0; leadsEst=0; attr=0
     tiers=@{A=0;B=0;C=0;D=0;E=0;NS=0} }
 }
 function _grainNode($fn,$d,$ci,$si,$ai){
@@ -157,18 +161,48 @@ function Load-Leads($csvPath,$fn){
   $Ldisp=HdrLike $h '*disposto*'
   $Lmail=HdrLike $h '*e-mail*'; if($Lmail -lt 0){ $Lmail=HdrLike $h '*mail*' }
   $sent=Intern '(sem rastreio)'
+
+  # ---- PASS 1: coleta leads validos NA ORDEM da planilha (a planilha e cronologica) ----
+  $items=New-Object System.Collections.Generic.List[object]
   for($i=1;$i -lt $rows.Count;$i++){ $r=$rows[$i]
     if($Lmail -ge 0 -and $Lmail -lt $r.Count){ $em=Deacc $r[$Lmail]; if($em -like '*agenciaup13*' -or $em -like '*teste@*' -or $em -like '*@teste*'){ continue } }
-    $hasSig=$false
-    for($k=0;$k -lt $r.Count;$k++){ if((Norm $r[$k]) -ne ''){ $hasSig=$true; break } }
-    if(-not $hasSig){ continue }
+    $hasSig=$false; for($k=0;$k -lt $r.Count;$k++){ if((Norm $r[$k]) -ne ''){ $hasSig=$true; break } }; if(-not $hasSig){ continue }
     $d= if($Ldate -ge 0 -and $Ldate -lt $r.Count){ LDate $r[$Ldate] } else { '' }
-    # capital / experiencia / disposto (distribuicoes + tier)
+    $items.Add([pscustomobject]@{ r=$r; d=$d; est=$false })
+  }
+
+  # ---- PASS 2: estima a data dos leads SEM data pela POSICAO na planilha ----
+  # (a planilha e cronologica -> interpola entre os leads datados vizinhos;
+  #  a cauda, apos a ultima data, espalha ate hoje). So mexe em quem esta vazio.
+  $n=$items.Count
+  if($n -gt 0){
+    $prevNum=New-Object 'int[]' $n; $nextNum=New-Object 'int[]' $n; $prevPos=New-Object 'int[]' $n; $nextPos=New-Object 'int[]' $n
+    $cv=-1; $cp=-1; for($k=0;$k -lt $n;$k++){ if($items[$k].d -ne ''){ $cv=DToNum $items[$k].d; $cp=$k }; $prevNum[$k]=$cv; $prevPos[$k]=$cp }
+    $cv=-1; $cp=-1; for($k=$n-1;$k -ge 0;$k--){ if($items[$k].d -ne ''){ $cv=DToNum $items[$k].d; $cp=$k }; $nextNum[$k]=$cv; $nextPos[$k]=$cp }
+    $capNum=DToNum $TODAY
+    $lastA=-1; for($k=$n-1;$k -ge 0;$k--){ if($items[$k].d -ne ''){ $lastA=$k; break } }
+    if($lastA -ge 0){
+      $tail=New-Object System.Collections.Generic.List[int]
+      for($k=$lastA+1;$k -lt $n;$k++){ if($items[$k].d -eq ''){ [void]$tail.Add($k) } }
+      $T=$tail.Count; $laNum=DToNum $items[$lastA].d
+      for($j=0;$j -lt $T;$j++){ $num= if($capNum -gt $laNum){ [int][math]::Round($laNum+(($j+1)/($T+1.0))*($capNum-$laNum)) } else { $laNum }
+        $items[$tail[$j]].d=NumToD $num; $items[$tail[$j]].est=$true }
+    }
+    for($k=0;$k -lt $n;$k++){ if($items[$k].d -ne ''){ continue }
+      $pp=$prevPos[$k]; $np=$nextPos[$k]
+      if($pp -ge 0 -and $np -ge 0){ $pn=$prevNum[$k]; $nn=$nextNum[$k]
+        $num= if($np -eq $pp){ $pn } else { [int][math]::Round($pn+(($k-$pp)/[double]($np-$pp))*($nn-$pn)) }
+        $items[$k].d=NumToD $num; $items[$k].est=$true }
+      elseif($np -ge 0){ $items[$k].d=NumToD $nextNum[$k]; $items[$k].est=$true }
+    }
+  }
+
+  # ---- PASS 3: agrega (atribuicao + tier + distribuicoes) ----
+  foreach($it in $items){ $r=$it.r; $d=$it.d
     $capRaw= if($Lcap -ge 0 -and $Lcap -lt $r.Count){ Norm $r[$Lcap] } else { '' }
     $tier=CapTier $capRaw
     $expRaw= if($Lexp -ge 0 -and $Lexp -lt $r.Count){ Norm $r[$Lexp] } else { '' }
     $dispRaw= if($Ldisp -ge 0 -and $Ldisp -lt $r.Count){ Norm $r[$Ldisp] } else { '' }
-    # atribuicao lead->campanha (co-localizacao com o gasto do funil)
     $cName=MatchName ($r[$Lcamp]) $fn.campDe
     if($cName -eq ''){ $ci=$sent; $si=$sent; $ai=$sent }
     else {
@@ -179,9 +213,8 @@ function Load-Leads($csvPath,$fn){
       $ci=Intern $cName; $si=Intern $sName; $ai=Intern $aName; $fn.attr++
     }
     $g=_grainNode $fn $d $ci $si $ai; $g.ld++; if(IsQualified $tier){ $g.ql++ }
-    $fn.leads++; $fn.tiers[$tier]++
+    $fn.leads++; $fn.tiers[$tier]++; if($it.est){ $fn.leadsEst++ }
     if($d -ne ''){ $fn.leadsDated++; $o=_dailyNode $fn $d; $o.ld++; $o.$tier++ }
-    # distribuicoes (rotulo cru da planilha)
     $ck2= if($capRaw -eq ''){'(sem resposta)'}else{$capRaw}; if(-not $fn.capDist.ContainsKey($ck2)){ $fn.capDist[$ck2]=0 }; $fn.capDist[$ck2]++
     if($expRaw -ne ''){ if(-not $fn.expDist.ContainsKey($expRaw)){ $fn.expDist[$expRaw]=0 }; $fn.expDist[$expRaw]++ }
     if($dispRaw -ne ''){ if(-not $fn.dispDist.ContainsKey($dispRaw)){ $fn.dispDist[$dispRaw]=0 }; $fn.dispDist[$dispRaw]++ }
@@ -210,7 +243,7 @@ function Funnel-Payload($fn){
     totals=[pscustomobject]@{
       spend=[Math]::Round((_s $dOut 'sp'),2); spendRaw=[Math]::Round((_s $dOut 'spr'),2)
       impr=[int](_s $dOut 'im'); clicks=[int](_s $dOut 'ck'); lpv=[int](_s $dOut 'lp')
-      leads=[int]$fn.leads; leadsDated=[int]$fn.leadsDated; attr=[int]$fn.attr; qualified=[int]$qlAll
+      leads=[int]$fn.leads; leadsDated=[int]$fn.leadsDated; leadsEst=[int]$fn.leadsEst; attr=[int]$fn.attr; qualified=[int]$qlAll
       tiers=$fn.tiers }
     daily=@($dOut); grain=@($grA)
     capDist=DistArr $fn.capDist; expDist=DistArr $fn.expDist; dispDist=DistArr $fn.dispDist

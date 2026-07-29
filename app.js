@@ -91,8 +91,8 @@ function funnelShell(cfg,fn){
   var note='';
   if(cfg.kind==='Typeform'){ note='Investimento = campanhas com <b>"typeform"</b> no nome + todo o gasto antes de 30/06 (quando só existia o Typeform).'; }
   else { note='Investimento = campanhas <b>sem "typeform"</b> a partir de 30/06 (lançamento do Pop-up).'; }
-  var undated = (fn.totals.leads||0)-(fn.totals.leadsDated||0);
-  var undNote = undated>0 ? ' · <b>'+intf(undated)+'</b> leads sem data (só aparecem em "Tudo"; os recortes por período usam os '+intf(fn.totals.leadsDated)+' leads datados)' : '';
+  var est = fn.totals.leadsEst||0;
+  var undNote = est>0 ? ' · <b>'+intf(est)+'</b> leads com <b>data estimada</b> pela ordem de chegada (Submitted At vazio na planilha)' : '';
   return ''
   +'<div class="editband"><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.product)+'</span><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.kind)+'</span> captação Meta Ads &nbsp;·&nbsp; '+note+undNote+'</div>'
   +'<div id="fwarn"></div>'
@@ -356,10 +356,10 @@ function renderFunnel(fk){
 function renderFunnelData(fk){
   var fn=FN[fk], cfg=CFG[fk], isTudo=(period==='tudo'), rng=rangeFor(period), prng=prevRange(rng);
   var a=aggFunnel(fn,rng,isTudo), p=aggFunnel(fn,prng,false), days=daysInRange(fn,rng);
-  var undated=(fn.totals.leads||0)-(fn.totals.leadsDated||0);
+  var est=fn.totals.leadsEst||0;
   var warn=el('fwarn');
-  if(warn){ if(!isTudo && undated>0.15*(fn.totals.leads||1)){
-    warn.innerHTML='<div class="warnbar">⚠ Este funil tem <b>'+intf(undated)+'</b> leads sem data na planilha de origem. No recorte por período o gasto é datado mas esses leads não entram, então o <b>CPL fica distorcido</b> (parece alto). Para o CPL real deste funil, use o período <b>“Tudo”</b>.</div>'; }
+  if(warn){ if(est>0.15*(fn.totals.leads||1)){
+    warn.innerHTML='<div class="warnbar">ℹ <b>'+intf(est)+'</b> dos '+intf(fn.totals.leads)+' leads deste funil estão com <b>data estimada</b> pela ordem de chegada na planilha (o campo “Submitted At” não vem preenchido na origem). Os <b>totais são exatos</b>; a divisão por dia/mês é aproximada (o mês fecha certo, o dia pode variar 1–2). Preenchendo a data desses leads na planilha, fica exato automaticamente.</div>'; }
     else { warn.innerHTML=''; } }
   renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p); renderScore(cfg,fn,a);
   renderChartLeads(cfg,days); renderChartCpl(cfg,days); renderDist(cfg,fn);
