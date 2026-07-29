@@ -370,56 +370,56 @@ function renderFunnelData(fk){
    COMPARATIVO DIÁRIO (5ª aba)
 ==================================================================*/
 function cmpRows(prod){ var rows=arr((D.compare||{})[prod]); var last=-1;
-  rows.forEach(function(r,i){ if((r.invest||0)>0||(r.metaLeads||0)>0||(r.clintLeads||0)>0||(r.planilha||0)>0) last=i; });
+  rows.forEach(function(r,i){ if((r.qInvest||0)>0||(r.clintLeads||0)>0||(r.planilha||0)>0) last=i; });
   return rows.slice(0,last+1); }
-function cmpTotals(rows){ var t={invest:0,meta:0,clint:0,plan:0}; rows.forEach(function(r){ t.invest+=r.invest||0;t.meta+=r.metaLeads||0;t.clint+=r.clintLeads||0;t.plan+=r.planilha||0; }); return t; }
+// invest = das QUERIES (qInvest) ; ger = leads gerenciador = da NOSSA planilha (planilha) ; clint = comercial
+function cmpTotals(rows){ var t={invest:0,ger:0,clint:0}; rows.forEach(function(r){ t.invest+=r.qInvest||0;t.ger+=r.planilha||0;t.clint+=r.clintLeads||0; }); return t; }
 function cmpChart(rows,accent){
   var W=560,H=210,pl=32,pr=32,pt=12,pb=24,pw=W-pl-pr,ph=H-pt-pb,base=pt+ph;
-  var maxL=Math.max.apply(null,rows.map(function(r){return Math.max(r.metaLeads||0,r.clintLeads||0,r.planilha||0);}).concat([1]));
-  var maxS=Math.max.apply(null,rows.map(function(r){return r.invest||0;}).concat([1]));
+  var maxL=Math.max.apply(null,rows.map(function(r){return Math.max(r.clintLeads||0,r.planilha||0);}).concat([1]));
+  var maxS=Math.max.apply(null,rows.map(function(r){return r.qInvest||0;}).concat([1]));
   var n=rows.length||1,gw=pw/n,bw=Math.max(2,Math.min(14,gw*0.5));
   var s='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
   [0,0.5,1].forEach(function(f){ var y=pt+ph*(1-f); s+='<line x1="'+pl+'" y1="'+y+'" x2="'+(W-pr)+'" y2="'+y+'" stroke="#123123" stroke-dasharray="2 3"/>';
     s+='<text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end" fill="#4f7d68" font-size="9">'+Math.round(maxL*f)+'</text>';
     s+='<text x="'+(W-pr+3)+'" y="'+(y+3)+'" text-anchor="start" fill="#c98a2a" font-size="9">'+Math.round(maxS*f/1000)+'k</text>'; });
-  // invest bars (faint)
-  rows.forEach(function(r,i){ var xc=pl+gw*i+gw/2, sh=ph*dv(r.invest,maxS); if(r.invest>0)s+='<rect x="'+(xc-bw/2).toFixed(1)+'" y="'+(base-sh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+sh.toFixed(1)+'" rx="1.5" fill="'+accent+'" opacity=".16"/>'; });
-  // 3 lines: meta, planilha, clint
+  // invest bars (das queries)
+  rows.forEach(function(r,i){ var xc=pl+gw*i+gw/2, sh=ph*dv(r.qInvest,maxS); if(r.qInvest>0)s+='<rect x="'+(xc-bw/2).toFixed(1)+'" y="'+(base-sh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+sh.toFixed(1)+'" rx="1.5" fill="'+accent+'" opacity=".16"/>'; });
+  // 2 linhas: gerenciador (planilha), clint
   function line(key,col){ var pts=[]; rows.forEach(function(r,i){ var xc=pl+gw*i+gw/2, y=base-ph*clamp((r[key]||0)/maxL); pts.push([xc,y]); }); if(pts.length>1) s+='<path d="M'+pts.map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' L')+'" fill="none" stroke="'+col+'" stroke-width="2"/>'; }
-  line('metaLeads',COL.meta); line('planilha',COL.green2); line('clintLeads',COL.gold2);
+  line('planilha',COL.green2); line('clintLeads',COL.gold2);
   xticks(rows).forEach(function(i){ var xc=pl+gw*i+gw/2; s+='<text x="'+xc.toFixed(1)+'" y="'+(H-7)+'" text-anchor="middle" fill="#4f7d68" font-size="9">'+fmtBR(rows[i].d)+'</text>'; });
   s+=hitRects(rows.map(function(r){return {date:r.d};}),pl,gw,pt,ph)+'</svg>';
   return '<div class="chart">'+s+'</div>';
 }
 function renderCompareProd(prod,cfg){
   var rows=cmpRows(prod), t=cmpTotals(rows), accent=cfg.accent;
-  var cplClint=dv(t.invest,t.clint), cplMeta=dv(t.invest,t.meta);
+  var cpl=dv(t.invest,t.ger);
   var cls=cfg.flow?'f':'g', chid='cmpchart-'+prod;
   var stats='<div class="cmp-stats">'
-    +'<div class="cstat"><div class="cl">Investido (mês)</div><div class="cv">'+money0(t.invest)+'</div><div class="cs">c/ imposto Meta</div></div>'
-    +'<div class="cstat"><div class="cl">Leads Clint</div><div class="cv" style="color:'+COL.gold2+'">'+intf(t.clint)+'</div><div class="cs">o que o comercial relata</div></div>'
-    +'<div class="cstat"><div class="cl">CPL (invest ÷ Clint)</div><div class="cv">'+(t.clint?money(cplClint):'—')+'</div><div class="cs">Meta reportou '+intf(t.meta)+' · planilha '+intf(t.plan)+'</div></div>'
+    +'<div class="cstat"><div class="cl">Investido (mês)</div><div class="cv">'+money0(t.invest)+'</div><div class="cs">das queries · c/ imposto</div></div>'
+    +'<div class="cstat"><div class="cl">Leads Gerenciador</div><div class="cv" style="color:'+COL.green2+'">'+intf(t.ger)+'</div><div class="cs">captados na planilha · CPL <b>'+(t.ger?money(cpl):'—')+'</b></div></div>'
+    +'<div class="cstat"><div class="cl">Leads Clint</div><div class="cv" style="color:'+COL.gold2+'">'+intf(t.clint)+'</div><div class="cs">o comercial relata · Δ '+(t.clint-t.ger>=0?'+':'')+intf(t.clint-t.ger)+'</div></div>'
     +'</div>';
-  var leg='<div class="leadsrc-leg"><span><span class="dot" style="background:'+COL.meta+'"></span>Leads Meta (gerenciador)</span><span><span class="dot" style="background:'+COL.green2+'"></span>Leads na planilha (captação)</span><span><span class="dot" style="background:'+COL.gold2+'"></span>Leads na Clint (comercial)</span><span style="color:var(--muted2)">barra = investimento</span></div>';
+  var leg='<div class="leadsrc-leg"><span><span class="dot" style="background:'+COL.green2+'"></span>Leads gerenciador (planilha)</span><span><span class="dot" style="background:'+COL.gold2+'"></span>Leads na Clint (comercial)</span><span style="color:var(--muted2)">barra = investimento (queries)</span></div>';
   return '<div class="cmp-prod '+cls+'"><h3><span class="tdot '+(cfg.flow?'f':'g')+'"></span>'+esc(cfg.product)+' <span style="font-size:12px;color:var(--muted);font-weight:500">· Pop-up + Typeform</span></h3>'+stats+leg+'<div id="'+chid+'">'+cmpChart(rows,accent)+'</div></div>';
 }
 function renderCompareTable(prod,cfg){
   var rows=cmpRows(prod).slice().sort(function(a,b){return b.d.localeCompare(a.d);});
-  var maxS=Math.max.apply(null,rows.map(function(r){return r.invest||0;}).concat([1]));
+  var maxS=Math.max.apply(null,rows.map(function(r){return r.qInvest||0;}).concat([1]));
   var rgb=cfg.flow?'70,191,230':'47,227,160';
-  var head='<thead><tr><th>Dia</th><th>Investimento</th><th class="src-meta">Leads Meta</th><th class="src-plan">Planilha</th><th class="src-clint">Clint</th><th>Δ Clint−Meta</th><th>CPL (Clint)</th></tr></thead>';
-  var body=rows.map(function(r){ var delta=(r.clintLeads||0)-(r.metaLeads||0); var cpl=r.clintLeads>0?dv(r.invest,r.clintLeads):null;
+  var head='<thead><tr><th>Dia</th><th>Investimento</th><th class="src-plan">Leads Gerenciador</th><th class="src-clint">Clint</th><th>Δ Clint−Ger.</th><th>CPL</th></tr></thead>';
+  var body=rows.map(function(r){ var delta=(r.clintLeads||0)-(r.planilha||0); var cpl=r.planilha>0?dv(r.qInvest,r.planilha):null;
     return '<tr><td>'+fmtBR(r.d)+'</td>'
-      +'<td class="num"><span class="heatcell" style="'+heatBg(rgb,r.invest/maxS)+'">'+money0(r.invest)+'</span></td>'
-      +'<td class="num src-meta">'+intf(r.metaLeads)+'</td>'
+      +'<td class="num"><span class="heatcell" style="'+heatBg(rgb,r.qInvest/maxS)+'">'+money0(r.qInvest)+'</span></td>'
       +'<td class="num src-plan">'+intf(r.planilha)+'</td>'
       +'<td class="num src-clint">'+intf(r.clintLeads)+'</td>'
       +'<td class="num deltacell '+(delta>0?'gap-pos':(delta<0?'gap-neg':''))+'">'+(delta>0?'+':'')+intf(delta)+'</td>'
       +'<td class="num">'+(cpl!=null?money(cpl):'—')+'</td></tr>'; }).join('');
-  if(!rows.length) body='<tr><td colspan="7" class="empty">Sem dados.</td></tr>';
+  if(!rows.length) body='<tr><td colspan="6" class="empty">Sem dados.</td></tr>';
   var t=cmpTotals(rows);
-  var foot='<tfoot><tr><td>Total</td><td class="num">'+money0(t.invest)+'</td><td class="num src-meta">'+intf(t.meta)+'</td><td class="num src-plan">'+intf(t.plan)+'</td><td class="num src-clint">'+intf(t.clint)+'</td><td class="num">'+(t.clint-t.meta>0?'+':'')+intf(t.clint-t.meta)+'</td><td class="num">'+(t.clint?money(dv(t.invest,t.clint)):'—')+'</td></tr></tfoot>';
-  return '<div class="card"><div class="card-h"><span class="tdot '+(cfg.flow?'f':'g')+'"></span>'+esc(cfg.product)+' — dia a dia <span class="hint">tráfego (Meta / planilha) vs. comercial (Clint) · mais recente no topo</span></div><div class="table-scroll"><table class="tbl">'+head+'<tbody>'+body+'</tbody>'+foot+'</table></div></div>';
+  var foot='<tfoot><tr><td>Total</td><td class="num">'+money0(t.invest)+'</td><td class="num src-plan">'+intf(t.ger)+'</td><td class="num src-clint">'+intf(t.clint)+'</td><td class="num">'+(t.clint-t.ger>0?'+':'')+intf(t.clint-t.ger)+'</td><td class="num">'+(t.ger?money(dv(t.invest,t.ger)):'—')+'</td></tr></tfoot>';
+  return '<div class="card"><div class="card-h"><span class="tdot '+(cfg.flow?'f':'g')+'"></span>'+esc(cfg.product)+' — dia a dia <span class="hint">investimento das queries · leads gerenciador (planilha) vs. Clint (comercial) · mais recente no topo</span></div><div class="table-scroll"><table class="tbl">'+head+'<tbody>'+body+'</tbody>'+foot+'</table></div></div>';
 }
 function splitBar(title,vg,vf){ var tot=vg+vf; if(tot<=0)tot=1; var wg=vg/tot*100, wf=vf/tot*100;
   return '<div style="font-size:11.5px;color:var(--muted);margin:6px 0 3px">'+title+'</div><div class="tierbar" style="height:26px">'
@@ -432,17 +432,18 @@ function renderCompare(){
   var anyRow=cmpRows('growth')[0]||cmpRows('flow')[0];
   if(anyRow){ var MO=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']; mesLbl=MO[(+anyRow.d.slice(5,7))-1]+' de '+anyRow.d.slice(0,4); }
   host.innerHTML=''
-  +'<div class="editband"><span class="pill g">tráfego</span> vs <span class="pill g">planilha</span> vs <span class="pill gold" style="color:var(--gold2)">Clint (comercial)</span> &nbsp;·&nbsp; leads e investimento por dia · '+esc(mesLbl)+' · <b>o período do topo não afeta esta aba</b> (visão mensal)</div>'
+  +'<div class="editband"><span class="pill g">investimento (queries)</span> &nbsp;·&nbsp; <span class="pill g">leads gerenciador (planilha)</span> vs <span class="pill gold" style="color:var(--gold2)">Clint (comercial)</span> &nbsp;·&nbsp; por dia · '+esc(mesLbl)+' · <b>o período do topo não afeta esta aba</b> (visão mensal)</div>'
   +'<div class="cmp-head">'+renderCompareProd('growth',CFG['growth-type'])+renderCompareProd('flow',CFG['flow-type'])+'</div>'
   +'<div class="card"><div class="card-h">Growth × Flow — participação do mês</div>'
-  +splitBar('Investimento (c/ imposto)',tg.invest,tf.invest)
+  +splitBar('Investimento (das queries, c/ imposto)',tg.invest,tf.invest)
+  +splitBar('Leads gerenciador (planilha)',tg.ger,tf.ger)
   +splitBar('Leads na Clint (comercial)',tg.clint,tf.clint)
-  +splitBar('Leads na planilha (captação)',tg.plan,tf.plan)
-  +'<div class="mini-legend">Δ Clint−Meta &gt; 0 = o comercial registrou mais leads do que o gerenciador do Meta reportou naquele dia (leads de outras origens, ou Meta ainda não preenchido). Δ &lt; 0 = gerenciador reportou mais do que entrou na Clint (possível lead não trabalhado).</div></div>'
+  +'<div class="mini-legend">Investimento vem sempre das <b>queries</b> (gerenciador de anúncios). Leads gerenciador = leads captados na <b>nossa planilha</b>. Δ Clint−Ger. &gt; 0 = o comercial registrou mais leads na Clint do que caíram na planilha naquele dia (leads de outras origens). Δ &lt; 0 = caíram mais leads na planilha do que entraram na Clint (possível lead não trabalhado).</div></div>'
   +renderCompareTable('growth',CFG['growth-type'])
   +renderCompareTable('flow',CFG['flow-type']);
-  bindHits('cmpchart-growth',cmpRows('growth').map(function(r){return {date:r.d,r:r};}),function(x){ var r=x.r; return '<div class="tt-d">'+fmtBR(r.d)+'</div><div class="tt-r"><span class="src-meta">Meta</span><b>'+intf(r.metaLeads)+'</b></div><div class="tt-r"><span class="src-plan">Planilha</span><b>'+intf(r.planilha)+'</b></div><div class="tt-r"><span class="src-clint">Clint</span><b>'+intf(r.clintLeads)+'</b></div><div class="tt-sub">Invest '+money0(r.invest)+'</div>'; });
-  bindHits('cmpchart-flow',cmpRows('flow').map(function(r){return {date:r.d,r:r};}),function(x){ var r=x.r; return '<div class="tt-d">'+fmtBR(r.d)+'</div><div class="tt-r"><span class="src-meta">Meta</span><b>'+intf(r.metaLeads)+'</b></div><div class="tt-r"><span class="src-plan">Planilha</span><b>'+intf(r.planilha)+'</b></div><div class="tt-r"><span class="src-clint">Clint</span><b>'+intf(r.clintLeads)+'</b></div><div class="tt-sub">Invest '+money0(r.invest)+'</div>'; });
+  function cmpTip(x){ var r=x.r; return '<div class="tt-d">'+fmtBR(r.d)+'</div><div class="tt-r"><span class="src-plan">Gerenciador</span><b>'+intf(r.planilha)+'</b></div><div class="tt-r"><span class="src-clint">Clint</span><b>'+intf(r.clintLeads)+'</b></div><div class="tt-sub">Invest (queries) '+money0(r.qInvest)+'</div>'; }
+  bindHits('cmpchart-growth',cmpRows('growth').map(function(r){return {date:r.d,r:r};}),cmpTip);
+  bindHits('cmpchart-flow',cmpRows('flow').map(function(r){return {date:r.d,r:r};}),cmpTip);
 }
 
 /* =================================================================
