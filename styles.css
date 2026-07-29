@@ -169,6 +169,8 @@ b{font-weight:700}
 .act-ins{background:rgba(131,176,156,.1);color:var(--muted2)}
 
 /* tree */
+.tbl.tree{min-width:940px}
+.tbl.tree th,.tbl.tree td{padding:6px 7px}
 .tbl.tree td:first-child{white-space:nowrap}
 .tree .name{display:inline-flex;align-items:center;gap:6px;max-width:430px;overflow:hidden;text-overflow:ellipsis}
 .tree .caret{font-size:9px;color:var(--muted);transition:transform .15s;display:inline-block}

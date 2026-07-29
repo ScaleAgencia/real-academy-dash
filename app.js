@@ -254,8 +254,8 @@ function renderDaily(cfg,fn,rng){
 
 /* ---- optimization tree ---- */
 var expanded={}, treeSort={}, treeInit={};
-function newNode(name){ return {name:name,spend:0,leads:0,qual:0,kids:{}}; }
-function accum(n,r){ n.spend+=r.spend||0;n.leads+=r.leads||0;n.qual+=r.qual||0; }
+function newNode(name){ return {name:name,spend:0,leads:0,qual:0,impr:0,clicks:0,lpv:0,kids:{}}; }
+function accum(n,r){ n.spend+=r.spend||0;n.leads+=r.leads||0;n.qual+=r.qual||0;n.impr+=r.impr||0;n.clicks+=r.clicks||0;n.lpv+=r.lpv||0; }
 function buildTree(rows){ var c={}; rows.forEach(function(r){
   var cn=c[r.campaign]||(c[r.campaign]=newNode(r.campaign)); accum(cn,r);
   var sn=cn.kids[r.adset]||(cn.kids[r.adset]=newNode(r.adset)); accum(sn,r);
@@ -272,19 +272,28 @@ function actTag(n,medCpl){
 }
 function countAccel(n,medCpl){ var c=0; Object.keys(n.kids).forEach(function(k){ var kid=n.kids[k]; if(actTag(kid,medCpl).t==='Acelerar')c++; c+=countAccel(kid,medCpl); }); return c; }
 var ACT_RANK={'Acelerar':0,'Manter':1,'Revisar':2,'Atenção':3,'s/ gasto':4,'Dado insuf.':5,'—':6};
-var TREE_COLS=[{k:'name',l:'Campanha › Conjunto › Anúncio'},{k:'spend',l:'Invest.'},{k:'leads',l:'Leads'},{k:'cpl',l:'CPL'},{k:'qual',l:'Qualif.'},{k:'act',l:'Ação'}];
+var TREE_COLS=[{k:'name',l:'Campanha › Conjunto › Anúncio'},{k:'spend',l:'Invest.'},{k:'cpm',l:'CPM'},{k:'ctr',l:'CTR'},{k:'cpc',l:'CPC'},{k:'lpv',l:'LPV'},{k:'leads',l:'Leads'},{k:'cpl',l:'CPL'},{k:'qual',l:'Qualif.'},{k:'act',l:'Ação'}];
 function sortValOf(key,n){
   if(key==='spend') return -(n.spend||0);
   if(key==='leads') return -(n.leads||0);
+  if(key==='lpv')   return -(n.lpv||0);
   if(key==='qual')  return -(n.qual||0);
   if(key==='cpl')   return n.leads>0&&n.spend>0?dv(n.spend,n.leads):Infinity;
+  if(key==='cpm')   return n.impr>0&&n.spend>0?dv(n.spend,n.impr)*1000:Infinity;   // menor melhor
+  if(key==='ctr')   return n.impr>0?-dv(n.clicks,n.impr):Infinity;                 // maior melhor
+  if(key==='cpc')   return n.clicks>0&&n.spend>0?dv(n.spend,n.clicks):Infinity;    // menor melhor
   if(key==='act'){ var r=ACT_RANK[actTag(n,_medCpl).t]; return r==null?9:r; }
   return 0;
 }
 var _medCpl=0, _curFn='';
 function prettyName(x){ return (x==='(sem rastreio)'||x==='SEM_RASTREIO')?'— sem rastreio —':x; }
 function metricsCells(n,medCpl){ var cpl=(n.leads>0&&n.spend>0)?dv(n.spend,n.leads):null, cq=(n.qual>0&&n.spend>0)?dv(n.spend,n.qual):null, tag=actTag(n,medCpl);
+  var cpm=(n.impr>0&&n.spend>0)?dv(n.spend,n.impr)*1000:null, ctr=n.impr>0?dv(n.clicks,n.impr)*100:null, cpc=(n.clicks>0&&n.spend>0)?dv(n.spend,n.clicks):null;
   return '<td class="num">'+money0(n.spend)+'</td>'
+    +'<td class="num">'+(cpm!=null?money(cpm):'—')+'</td>'
+    +'<td class="num">'+(ctr!=null?nf1.format(ctr)+'%':'—')+'</td>'
+    +'<td class="num">'+(cpc!=null?money(cpc):'—')+'</td>'
+    +'<td class="num">'+(n.lpv>0?intf(n.lpv):'—')+'</td>'
     +'<td class="num">'+intf(n.leads)+'</td>'
     +'<td class="num">'+(cpl!=null?'<span class="cpl-pill '+cplClass(cpl,medCpl)+'">'+money(cpl)+'</span>':'—')+'</td>'
     +'<td class="num">'+intf(n.qual)+(cq!=null?' <span style="color:var(--muted2);font-size:10px">'+money0(cq)+'</span>':'')+'</td>'
@@ -314,7 +323,7 @@ function renderTree(cfg,fn,rng,isTudo){
   order.forEach(function(cK){ var c=camps[cK],cKey='c:'+cK,cHas=Object.keys(c.kids).length>0; out.push(treeRow(c,0,cKey,cHas,medCpl));
     if(expanded[fk][cKey]){ skeys(c.kids).forEach(function(sK){ var sN=c.kids[sK],sKey=cKey+'|s:'+sK,sHas=Object.keys(sN.kids).length>0; out.push(treeRow(sN,1,sKey,sHas,medCpl));
       if(expanded[fk][sKey]){ skeys(sN.kids).forEach(function(aK){ out.push(treeRow(sN.kids[aK],2,sKey+'|a:'+aK,false,medCpl)); }); } }); } });
-  if(!out.length) out.push('<tr><td colspan="6" class="empty">Sem dados no período.</td></tr>');
+  if(!out.length) out.push('<tr><td colspan="10" class="empty">Sem dados no período.</td></tr>');
   var tEl=el('ftree'); tEl.innerHTML=head+'<tbody>'+out.join('')+'</tbody>';
   el('ftreeLegend').innerHTML='<span><span class="act act-acel">Acelerar</span> CPL ≤ 0,8× a mediana</span><span><span class="act act-rev">Revisar</span> CPL ≥ 1,35×</span><span><span class="act act-pause">Atenção</span> gastou sem lead</span><span style="color:var(--muted2)">mediana CPL do período: '+(medCpl?money(medCpl):'—')+' · clique num cabeçalho p/ ordenar</span>';
   Array.prototype.forEach.call(tEl.querySelectorAll('th.sortable'),function(th){ th.addEventListener('click',function(){ var k=th.getAttribute('data-col'); if(ss.key===k)ss.rev=!ss.rev; else {ss.key=k;ss.rev=false;} renderTree(cfg,fn,rng,isTudo); }); });
