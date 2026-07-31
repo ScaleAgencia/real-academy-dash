@@ -40,6 +40,26 @@ var CFG = {
   'flow-popup':  { product:'Flow',   kind:'Pop-up',   accent:COL.flow,  flow:true,  hasDisp:false },
   'flow-type':   { product:'Flow',   kind:'Typeform', accent:COL.flow,  flow:true,  hasDisp:true }
 };
+/* ---------- visão geral por produto (soma Pop-up + Typeform; split disjunto = sem duplicação) ---------- */
+function mergeDistArr(a,b){ var m={}; arr(a).concat(arr(b)).forEach(function(x){ if(!x)return; m[x.label]=(m[x.label]||0)+(x.count||0); });
+  return Object.keys(m).map(function(k){return {label:k,count:m[k]};}).sort(function(x,y){return y.count-x.count;}); }
+function combineFunnels(key,fa,fb){
+  var dm={}; [fa,fb].forEach(function(f){ f.daily.forEach(function(o){ var x=dm[o.date]||(dm[o.date]={date:o.date,sp:0,spr:0,im:0,ck:0,lp:0,ld:0,A:0,B:0,C:0,D:0,E:0,NS:0});
+    x.sp+=o.sp||0;x.spr+=o.spr||0;x.im+=o.im||0;x.ck+=o.ck||0;x.lp+=o.lp||0;x.ld+=o.ld||0; ['A','B','C','D','E','NS'].forEach(function(k){x[k]+=o[k]||0;}); }); });
+  var daily=Object.keys(dm).map(function(k){return dm[k];}).sort(function(a,b){return a.date.localeCompare(b.date);});
+  var ta=fa.totals||{}, tb=fb.totals||{}; function sm(k){ return (+ta[k]||0)+(+tb[k]||0); }
+  var tiers={}; ['A','B','C','D','E','NS'].forEach(function(k){ tiers[k]=((ta.tiers||{})[k]||0)+((tb.tiers||{})[k]||0); });
+  function mn(a,b){ if(!a)return b; if(!b)return a; return a<b?a:b; } function mx(a,b){ if(!a)return b; if(!b)return a; return a>b?a:b; }
+  return { key:key, daily:daily, _grain:arr(fa._grain).concat(arr(fb._grain)),
+    totals:{ spend:sm('spend'),spendRaw:sm('spendRaw'),impr:sm('impr'),clicks:sm('clicks'),lpv:sm('lpv'),
+      leads:sm('leads'),leadsDated:sm('leadsDated'),leadsEst:sm('leadsEst'),attr:sm('attr'),qualified:sm('qualified'),tiers:tiers },
+    capDist:mergeDistArr(fa.capDist,fb.capDist), expDist:mergeDistArr(fa.expDist,fb.expDist), dispDist:mergeDistArr(fa.dispDist,fb.dispDist),
+    dateMin:mn(fa.dateMin,fb.dateMin), dateMax:mx(fa.dateMax,fb.dateMax), leadMin:mn(fa.leadMin,fb.leadMin), leadMax:mx(fa.leadMax,fb.leadMax) };
+}
+FN['growth-all']=combineFunnels('growth-all',FN['growth-type'],FN['growth-popup']);
+FN['flow-all']  =combineFunnels('flow-all',  FN['flow-type'],  FN['flow-popup']);
+CFG['growth-all']={ product:'Growth', kind:'Visão Geral', accent:COL.green, flow:false, hasDisp:true, isAll:true };
+CFG['flow-all']  ={ product:'Flow',   kind:'Visão Geral', accent:COL.flow,  flow:true,  hasDisp:true, isAll:true };
 var TIER = [
   {k:'A',label:'A · acima de R$ 1 mi',color:'#2fe3a0'},
   {k:'B',label:'B · R$ 500 mil–1 mi',color:'#7bd88a'},
@@ -89,10 +109,11 @@ function trendHTML(cur,prev,higherBetter){ if(prev==null||!isFinite(prev)||prev=
 function funnelShell(cfg,fn){
   var acc=cfg.flow?'flow':'g';
   var note='';
-  if(cfg.kind==='Typeform'){ note='Investimento = campanhas com <b>"typeform"</b> no nome + todo o gasto antes de 30/06 (quando só existia o Typeform).'; }
+  if(cfg.isAll){ note='<b>Pop-up + Typeform somados</b> · todos os leads, gasto e campanhas do '+esc(cfg.product)+' (imposto incluso).'; }
+  else if(cfg.kind==='Typeform'){ note='Investimento = campanhas com <b>"typeform"</b> no nome + todo o gasto antes de 30/06 (quando só existia o Typeform).'; }
   else { note='Investimento = campanhas <b>sem "typeform"</b> a partir de 30/06 (lançamento do Pop-up).'; }
   var est = fn.totals.leadsEst||0;
-  var undNote = est>0 ? ' · <b>'+intf(est)+'</b> leads com <b>data estimada</b> pela ordem de chegada (Submitted At vazio na planilha)' : '';
+  var undNote = est>0.15*(fn.totals.leads||1) ? ' · <b>'+intf(est)+'</b> leads com <b>data estimada</b> pela ordem de chegada (Submitted At vazio na planilha)' : '';
   return ''
   +'<div class="editband"><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.product)+'</span><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.kind)+'</span> captação Meta Ads &nbsp;·&nbsp; '+note+undNote+'</div>'
   +'<div id="fwarn"></div>'
@@ -466,8 +487,8 @@ function renderCompare(){
 /* =================================================================
    TABS + PERÍODO
 ==================================================================*/
-var TABS=['growth-popup','growth-type','flow-popup','flow-type','compare'];
-var active='growth-popup';
+var TABS=['growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','compare'];
+var active='growth-all';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
 function activateTab(id){ active=id;
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){ x.classList.toggle('active',x.getAttribute('data-tab')===id); });
@@ -491,7 +512,7 @@ function initPeriods(){ el('periods').innerHTML=periodsHTML();
   de.addEventListener('change',onDate); at.addEventListener('change',onDate); syncPeriodUI(); }
 
 function initCoverage(){ el('updated').textContent=D.generatedAtBR||'—'; if(el('taxf'))el('taxf').textContent=(D.taxMultiplier||1.1385).toFixed(4).replace('.',',');
-  var totLeads=0,totQ=0,totSpend=0; Object.keys(FN).forEach(function(k){ var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
+  var totLeads=0,totQ=0,totSpend=0; ['growth-popup','growth-type','flow-popup','flow-type'].forEach(function(k){ var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
   el('coverage').innerHTML='<b>'+intf(totLeads)+'</b> leads captados · <b>'+intf(totQ)+'</b> qualificados · <b>'+money0(totSpend)+'</b> investidos (c/ imposto) nos 4 funis · janela até '+fmtBR(maxDate)+'. '
     +'Pop-up desde 30/06/2026 · Typeform (campanhas dedicadas) desde 14/05/2026.'; }
 
