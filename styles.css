@@ -59,6 +59,7 @@ b{font-weight:700}
 .tdot.g{background:var(--green);box-shadow:0 0 7px rgba(47,227,160,.6)}
 .tdot.f{background:var(--flow);box-shadow:0 0 7px rgba(70,191,230,.6)}
 .tdot.gold{background:var(--gold);box-shadow:0 0 7px rgba(217,180,90,.55)}
+.tdot.b{background:#a78bfa;box-shadow:0 0 7px rgba(167,139,250,.6)}
 
 /* ---------- cards ---------- */
 .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;margin-bottom:16px;box-shadow:var(--shadow)}

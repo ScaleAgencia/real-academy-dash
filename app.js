@@ -17,7 +17,7 @@ function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function isDate(x){ return /^\d{4}-\d{2}-\d{2}$/.test(x); }
 function fmtBR(iso){ if(!isDate(iso)) return iso; var p=iso.split('-'); return p[2]+'/'+p[1]; }
-var COL={green:'#2fe3a0',green2:'#5cf0b8',gold:'#d9b45a',gold2:'#f0d38f',flow:'#46bfe6',flow2:'#7ad4f0',meta:'#8fbef0',muted:'#83b09c'};
+var COL={green:'#2fe3a0',green2:'#5cf0b8',gold:'#d9b45a',gold2:'#f0d38f',flow:'#46bfe6',flow2:'#7ad4f0',meta:'#8fbef0',muted:'#83b09c',build:'#a78bfa',build2:'#c4b5fd'};
 
 /* ---------- funnels ---------- */
 function prep(key,label){
@@ -32,13 +32,15 @@ var FN = {
   'growth-popup': prep('growth-popup','Growth · Pop-up'),
   'growth-type':  prep('growth-type','Growth · Typeform'),
   'flow-popup':   prep('flow-popup','Flow · Pop-up'),
-  'flow-type':    prep('flow-type','Flow · Typeform')
+  'flow-type':    prep('flow-type','Flow · Typeform'),
+  'build':        prep('build','Build · Pop-up')
 };
 var CFG = {
   'growth-popup':{ product:'Growth', kind:'Pop-up',   accent:COL.green, flow:false, hasDisp:false },
   'growth-type': { product:'Growth', kind:'Typeform', accent:COL.green, flow:false, hasDisp:true },
   'flow-popup':  { product:'Flow',   kind:'Pop-up',   accent:COL.flow,  flow:true,  hasDisp:false },
-  'flow-type':   { product:'Flow',   kind:'Typeform', accent:COL.flow,  flow:true,  hasDisp:true }
+  'flow-type':   { product:'Flow',   kind:'Typeform', accent:COL.flow,  flow:true,  hasDisp:true },
+  'build':       { product:'Build',  kind:'Pop-up',   accent:COL.build, flow:false, hasDisp:false, standalone:true, pal:['#c4b5fd','#a78bfa','#8b6fe0','#d9b45a'], rgb:'167,139,250' }
 };
 /* ---------- visão geral por produto (soma Pop-up + Typeform; split disjunto = sem duplicação) ---------- */
 function mergeDistArr(a,b){ var m={}; arr(a).concat(arr(b)).forEach(function(x){ if(!x)return; m[x.label]=(m[x.label]||0)+(x.count||0); });
@@ -109,7 +111,8 @@ function trendHTML(cur,prev,higherBetter){ if(prev==null||!isFinite(prev)||prev=
 function funnelShell(cfg,fn){
   var acc=cfg.flow?'flow':'g';
   var note='';
-  if(cfg.isAll){ note='<b>Pop-up + Typeform somados</b> · todos os leads, gasto e campanhas do '+esc(cfg.product)+' (imposto incluso).'; }
+  if(cfg.standalone){ note='Funil <b>'+esc(cfg.product)+'</b> · investimento = todas as campanhas da query (imposto incluso). Funil novo — poucos dias de dados.'; }
+  else if(cfg.isAll){ note='<b>Pop-up + Typeform somados</b> · todos os leads, gasto e campanhas do '+esc(cfg.product)+' (imposto incluso).'; }
   else if(cfg.kind==='Typeform'){ note='Investimento = campanhas com <b>"typeform"</b> no nome + todo o gasto antes de 30/06 (quando só existia o Typeform).'; }
   else { note='Investimento = campanhas <b>sem "typeform"</b> a partir de 30/06 (lançamento do Pop-up).'; }
   var est = fn.totals.leadsEst||0;
@@ -155,7 +158,7 @@ function renderKpi(cfg,fn,a,p){
 var FN_W=[100,74,52,34], FN_COL=['#5cf0b8','#2fe3a0','#1ba97a','#d9b45a'];
 var FN_COL_F=['#7ad4f0','#46bfe6','#2f8fb8','#d9b45a'];
 function renderFunnelViz(cfg,a,p){
-  var cols=cfg.flow?FN_COL_F:FN_COL;
+  var cols=cfg.pal||(cfg.flow?FN_COL_F:FN_COL);
   var stages=[
     {l:'Impressões',v:a.impr,cost:'CPM',cf:dv(a.spend,a.impr)*1000,rate:'CTR',rf:dv(a.clicks,a.impr),pcf:dv(p.spend,p.impr)*1000,prf:dv(p.clicks,p.impr)},
     {l:'Cliques',v:a.clicks,cost:'CPC',cf:dv(a.spend,a.clicks),rate:'Connect',rf:dv(a.lpv,a.clicks),pcf:dv(p.spend,p.clicks),prf:dv(p.lpv,p.clicks)},
@@ -258,7 +261,7 @@ function renderDaily(cfg,fn,rng){
   var rows=daysInRange(fn,rng).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
   var maxS=Math.max.apply(null,rows.map(function(r){return r.sp||0;}).concat([1]));
   var medCpl=median(rows.map(function(r){return r.ld>0?dv(r.sp,r.ld):null;}));
-  var rgb=cfg.flow?'70,191,230':'47,227,160';
+  var rgb=cfg.rgb||(cfg.flow?'70,191,230':'47,227,160');
   var head='<thead><tr><th>Dia</th><th>Investimento</th><th>Leads</th><th>CPL</th><th>Qualif.</th><th>CPL qualif.</th></tr></thead>';
   var body=rows.map(function(r){ var cpl=r.ld>0?dv(r.sp,r.ld):null; var q=(r.A||0)+(r.B||0)+(r.C||0); var cq=q>0?dv(r.sp,q):null;
     return '<tr><td>'+fmtBR(r.date)+'</td>'
@@ -487,7 +490,7 @@ function renderCompare(){
 /* =================================================================
    TABS + PERÍODO
 ==================================================================*/
-var TABS=['growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','compare'];
+var TABS=['growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','compare'];
 var active='growth-all';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
 function activateTab(id){ active=id;
@@ -512,9 +515,9 @@ function initPeriods(){ el('periods').innerHTML=periodsHTML();
   de.addEventListener('change',onDate); at.addEventListener('change',onDate); syncPeriodUI(); }
 
 function initCoverage(){ el('updated').textContent=D.generatedAtBR||'—'; if(el('taxf'))el('taxf').textContent=(D.taxMultiplier||1.1385).toFixed(4).replace('.',',');
-  var totLeads=0,totQ=0,totSpend=0; ['growth-popup','growth-type','flow-popup','flow-type'].forEach(function(k){ var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
-  el('coverage').innerHTML='<b>'+intf(totLeads)+'</b> leads captados · <b>'+intf(totQ)+'</b> qualificados · <b>'+money0(totSpend)+'</b> investidos (c/ imposto) nos 4 funis · janela até '+fmtBR(maxDate)+'. '
-    +'Pop-up desde 30/06/2026 · Typeform (campanhas dedicadas) desde 14/05/2026.'; }
+  var totLeads=0,totQ=0,totSpend=0; ['growth-popup','growth-type','flow-popup','flow-type','build'].forEach(function(k){ if(!FN[k])return; var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
+  el('coverage').innerHTML='<b>'+intf(totLeads)+'</b> leads captados · <b>'+intf(totQ)+'</b> qualificados · <b>'+money0(totSpend)+'</b> investidos (c/ imposto) · Growth · Flow · Build · janela até '+fmtBR(maxDate)+'. '
+    +'Pop-up desde 30/06/2026 · Typeform (campanhas dedicadas) desde 14/05/2026 · Build desde 01/08/2026.'; }
 
 if(!D.funnels){ el('coverage').innerHTML='<b>Sem dados.</b> Rode o build.ps1 para gerar o data.js.'; }
 else { initCoverage(); initPeriods(); initTabs(); activateTab(active); }
