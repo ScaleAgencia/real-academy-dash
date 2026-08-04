@@ -46,11 +46,11 @@ var CFG = {
 function mergeDistArr(a,b){ var m={}; arr(a).concat(arr(b)).forEach(function(x){ if(!x)return; m[x.label]=(m[x.label]||0)+(x.count||0); });
   return Object.keys(m).map(function(k){return {label:k,count:m[k]};}).sort(function(x,y){return y.count-x.count;}); }
 function combineFunnels(key,fa,fb){
-  var dm={}; [fa,fb].forEach(function(f){ f.daily.forEach(function(o){ var x=dm[o.date]||(dm[o.date]={date:o.date,sp:0,spr:0,im:0,ck:0,lp:0,ld:0,A:0,B:0,C:0,D:0,E:0,NS:0});
-    x.sp+=o.sp||0;x.spr+=o.spr||0;x.im+=o.im||0;x.ck+=o.ck||0;x.lp+=o.lp||0;x.ld+=o.ld||0; ['A','B','C','D','E','NS'].forEach(function(k){x[k]+=o[k]||0;}); }); });
+  var dm={}; [fa,fb].forEach(function(f){ f.daily.forEach(function(o){ var x=dm[o.date]||(dm[o.date]={date:o.date,sp:0,spr:0,im:0,ck:0,lp:0,ld:0,A:0,B:0,N:0});
+    x.sp+=o.sp||0;x.spr+=o.spr||0;x.im+=o.im||0;x.ck+=o.ck||0;x.lp+=o.lp||0;x.ld+=o.ld||0; ['A','B','N'].forEach(function(k){x[k]+=o[k]||0;}); }); });
   var daily=Object.keys(dm).map(function(k){return dm[k];}).sort(function(a,b){return a.date.localeCompare(b.date);});
   var ta=fa.totals||{}, tb=fb.totals||{}; function sm(k){ return (+ta[k]||0)+(+tb[k]||0); }
-  var tiers={}; ['A','B','C','D','E','NS'].forEach(function(k){ tiers[k]=((ta.tiers||{})[k]||0)+((tb.tiers||{})[k]||0); });
+  var tiers={}; ['A','B','N'].forEach(function(k){ tiers[k]=((ta.tiers||{})[k]||0)+((tb.tiers||{})[k]||0); });
   function mn(a,b){ if(!a)return b; if(!b)return a; return a<b?a:b; } function mx(a,b){ if(!a)return b; if(!b)return a; return a>b?a:b; }
   return { key:key, daily:daily, _grain:arr(fa._grain).concat(arr(fb._grain)),
     totals:{ spend:sm('spend'),spendRaw:sm('spendRaw'),impr:sm('impr'),clicks:sm('clicks'),lpv:sm('lpv'),
@@ -63,12 +63,9 @@ FN['flow-all']  =combineFunnels('flow-all',  FN['flow-type'],  FN['flow-popup'])
 CFG['growth-all']={ product:'Growth', kind:'Visão Geral', accent:COL.green, flow:false, hasDisp:true, isAll:true };
 CFG['flow-all']  ={ product:'Flow',   kind:'Visão Geral', accent:COL.flow,  flow:true,  hasDisp:true, isAll:true };
 var TIER = [
-  {k:'A',label:'A · acima de R$ 1 mi',color:'#2fe3a0'},
-  {k:'B',label:'B · R$ 500 mil–1 mi',color:'#7bd88a'},
-  {k:'C',label:'C · R$ 200–500 mil',color:'#d9b45a'},
-  {k:'D',label:'D · R$ 50–200 mil',color:'#e6a55c'},
-  {k:'E',label:'E · até R$ 50 mil',color:'#e57e7e'},
-  {k:'NS',label:'sem resposta',color:'#5f7d70'}
+  {k:'A',label:'A · investidor ativo + R$ 500 mil–1 mi',color:'#2fe3a0'},
+  {k:'B',label:'B · investidor ativo',color:'#7bd88a'},
+  {k:'N',label:'não qualificado',color:'#5f7d70'}
 ];
 
 /* ---------- período global ---------- */
@@ -91,14 +88,14 @@ function rangeFor(k){
 function prevRange(rng){ var len=daysBetween(rng[0],rng[1])+1; var pe=addDays(rng[0],-1); return [addDays(pe,-(len-1)),pe]; }
 
 /* ---------- agregação de um funil ---------- */
-function emptyAgg(){ return {spend:0,spendRaw:0,impr:0,clicks:0,lpv:0,leads:0,leadsDated:0,qualified:0,tiers:{A:0,B:0,C:0,D:0,E:0,NS:0}}; }
+function emptyAgg(){ return {spend:0,spendRaw:0,impr:0,clicks:0,lpv:0,leads:0,leadsDated:0,qualified:0,tiers:{A:0,B:0,N:0}}; }
 function aggFunnel(fn,rng,isTudo){
   if(isTudo){ var t=fn.totals; return {spend:+t.spend||0,spendRaw:+t.spendRaw||0,impr:+t.impr||0,clicks:+t.clicks||0,lpv:+t.lpv||0,
     leads:+t.leads||0,leadsDated:+t.leadsDated||0,qualified:+t.qualified||0,tiers:t.tiers||{}}; }
   var o=emptyAgg();
   fn.daily.forEach(function(d){ if(!inRange(d.date,rng))return; o.spend+=d.sp||0;o.spendRaw+=d.spr||0;o.impr+=d.im||0;o.clicks+=d.ck||0;o.lpv+=d.lp||0;o.leads+=d.ld||0;
-    ['A','B','C','D','E','NS'].forEach(function(k){o.tiers[k]+=d[k]||0;}); });
-  o.qualified=(o.tiers.A||0)+(o.tiers.B||0)+(o.tiers.C||0); o.leadsDated=o.leads; return o;
+    ['A','B','N'].forEach(function(k){o.tiers[k]+=d[k]||0;}); });
+  o.qualified=(o.tiers.A||0)+(o.tiers.B||0); o.leadsDated=o.leads; return o;
 }
 function daysInRange(fn,rng){ return fn.daily.filter(function(d){return inRange(d.date,rng);}).sort(function(a,b){return a.date.localeCompare(b.date);}); }
 function median(xs){ var a=xs.filter(function(x){return x!=null&&isFinite(x)&&x>0;}).sort(function(x,y){return x-y;}); if(!a.length)return 0; var m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; }
@@ -123,7 +120,7 @@ function funnelShell(cfg,fn){
   +'<div class="kgrid" id="fkpi"></div>'
   +'<div class="funnel-grid">'
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Funil de captação <span class="hint">Meta Ads · imposto incluso · seta = vs. período anterior</span></div><div id="ffunnel"></div></div>'
-  +'  <div class="card" style="margin-bottom:0"><div class="card-h">Leadscore por capital <span class="hint">faixa que o lead tem p/ investir · qualificado = A+B+C (≥ R$ 200 mil)</span></div><div id="fscore"></div></div>'
+  +'  <div class="card" style="margin-bottom:0"><div class="card-h">Leadscore — qualificação <span class="hint">A = investidor ativo + R$ 500 mil–1 mi · B = investidor ativo (qualquer capital) · qualificado = A+B</span></div><div id="fscore"></div></div>'
   +'</div>'
   +'<div class="row-2" style="margin-top:16px">'
   +'  <div class="card"><div class="card-h">Leads por dia <span class="hint">verde/ouro = qualificado no total</span></div><div id="fchartLeads"></div></div>'
@@ -148,7 +145,7 @@ function renderKpi(cfg,fn,a,p){
   var html=hero
     + kc('hl','Leads',intf(a.leads), 'gerenciador '+money(cplR)+' de CPL '+trendHTML(cpl,dv(p.spend,p.leads),false))
     + kc('hl','CPL <span style="color:var(--muted2)">(c/ imposto)</span>', money(cpl), 'custo por lead '+trendHTML(cpl,dv(p.spend,p.leads),false))
-    + kc('gold','Qualificados', intf(a.qualified)+' <span style="font-size:13px;color:var(--muted)">· '+nf1.format(qpct)+'%</span>', 'A+B+C (≥ R$ 200 mil) · CPL qualif. <b>'+ (a.qualified?money(cplq):'—') +'</b>');
+    + kc('gold','Qualificados', intf(a.qualified)+' <span style="font-size:13px;color:var(--muted)">· '+nf1.format(qpct)+'%</span>', 'A+B (investidor ativo) · CPL qualif. <b>'+ (a.qualified?money(cplq):'—') +'</b>');
   el('fkpi').innerHTML=html;
   // linha de métricas de topo de funil embaixo do hero — reaproveita subtítulo do hero
   el('fkpi').firstChild.innerHTML += '<div class="h-foot" style="margin-top:9px;border-top:1px solid var(--line);padding-top:8px">'
@@ -186,7 +183,7 @@ function renderScore(cfg,fn,a){
   TIER.forEach(function(x){ var c=t[x.k]||0, w=total>0?c/total*100:0; if(w>0.4) bar+='<span style="width:'+w.toFixed(2)+'%;background:'+x.color+'" title="'+esc(x.label)+': '+c+'">'+(w>7?intf(c):'')+'</span>'; });
   bar+='</div>';
   var leg='<div class="tierleg">'+TIER.map(function(x){ var c=t[x.k]||0; return '<span class="tl"><span class="sw" style="background:'+x.color+'"></span>'+esc(x.label.split(' · ')[0])+' <b>'+intf(c)+'</b></span>'; }).join('')+'</div>';
-  var badge='<div class="qual-badge"><div><div class="qn">'+intf(qual)+'</div></div><div class="ql"><b>'+nf1.format(dv(qual,total)*100)+'%</b> qualificados (A+B+C · ≥ R$ 200 mil)<br>CPL qualificado <b>'+(qual?money(cplq):'—')+'</b> · de <b>'+intf(total)+'</b> leads no período</div></div>';
+  var badge='<div class="qual-badge"><div><div class="qn">'+intf(qual)+'</div></div><div class="ql"><b>'+nf1.format(dv(qual,total)*100)+'%</b> qualificados (A+B · investidor ativo)<br>CPL qualificado <b>'+(qual?money(cplq):'—')+'</b> · de <b>'+intf(total)+'</b> leads no período</div></div>';
   el('fscore').innerHTML=badge+bar+leg;
 }
 
@@ -225,14 +222,14 @@ function renderChartLeads(cfg,days){
   [0,0.5,1].forEach(function(f){ var y=pt+ph*(1-f); s+='<line x1="'+pl+'" y1="'+y+'" x2="'+(W-pr)+'" y2="'+y+'" stroke="#123123" stroke-dasharray="2 3"/>';
     s+='<text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end" fill="#4f7d68" font-size="9">'+Math.round(maxV*f)+'</text>'; });
   days.forEach(function(d,i){ var xc=pl+gw*i+gw/2, vh=ph*dv(d.ld,maxV); if(d.ld>0){
-    var q=(d.A||0)+(d.B||0)+(d.C||0), qh=ph*dv(q,maxV);
+    var q=(d.A||0)+(d.B||0), qh=ph*dv(q,maxV);
     s+='<rect x="'+(xc-bw/2).toFixed(1)+'" y="'+(base-vh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+vh.toFixed(1)+'" rx="1.5" fill="'+acc+'" opacity=".32"/>';
     if(q>0) s+='<rect x="'+(xc-bw/2).toFixed(1)+'" y="'+(base-qh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+qh.toFixed(1)+'" rx="1.5" fill="'+COL.gold+'"/>';
   } });
   xticks(days).forEach(function(i){ var xc=pl+gw*i+gw/2; s+='<text x="'+xc.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" fill="#4f7d68" font-size="9">'+fmtBR(days[i].date)+'</text>'; });
   s+=hitRects(days,pl,gw,pt,ph)+'</svg>';
-  el('fchartLeads').innerHTML='<div class="chart">'+s+'</div><div class="chart-legend"><span><span class="dot" style="background:'+acc+';opacity:.5"></span>Leads</span><span><span class="dot" style="background:'+COL.gold+'"></span>Qualificados (A+B+C)</span></div>';
-  bindHits('fchartLeads',days,function(d){ var q=(d.A||0)+(d.B||0)+(d.C||0); return '<div class="tt-d">'+fmtBR(d.date)+'</div><div class="tt-r"><span style="color:'+cfg.accent+'">Leads</span><b>'+intf(d.ld)+'</b></div><div class="tt-r"><span style="color:'+COL.gold2+'">Qualif.</span><b>'+intf(q)+'</b></div><div class="tt-sub">CPL '+(d.ld?money(dv(d.sp,d.ld)):'—')+' · invest '+money0(d.sp)+'</div>'; });
+  el('fchartLeads').innerHTML='<div class="chart">'+s+'</div><div class="chart-legend"><span><span class="dot" style="background:'+acc+';opacity:.5"></span>Leads</span><span><span class="dot" style="background:'+COL.gold+'"></span>Qualificados (A+B)</span></div>';
+  bindHits('fchartLeads',days,function(d){ var q=(d.A||0)+(d.B||0); return '<div class="tt-d">'+fmtBR(d.date)+'</div><div class="tt-r"><span style="color:'+cfg.accent+'">Leads</span><b>'+intf(d.ld)+'</b></div><div class="tt-r"><span style="color:'+COL.gold2+'">Qualif.</span><b>'+intf(q)+'</b></div><div class="tt-sub">CPL '+(d.ld?money(dv(d.sp,d.ld)):'—')+' · invest '+money0(d.sp)+'</div>'; });
 }
 function renderChartCpl(cfg,days){
   var W=560,H=200,pl=34,pr=30,pt=12,pb=22,pw=W-pl-pr,ph=H-pt-pb,base=pt+ph;
@@ -263,7 +260,7 @@ function renderDaily(cfg,fn,rng){
   var medCpl=median(rows.map(function(r){return r.ld>0?dv(r.sp,r.ld):null;}));
   var rgb=cfg.rgb||(cfg.flow?'70,191,230':'47,227,160');
   var head='<thead><tr><th>Dia</th><th>Investimento</th><th>Leads</th><th>CPL</th><th>Qualif.</th><th>CPL qualif.</th></tr></thead>';
-  var body=rows.map(function(r){ var cpl=r.ld>0?dv(r.sp,r.ld):null; var q=(r.A||0)+(r.B||0)+(r.C||0); var cq=q>0?dv(r.sp,q):null;
+  var body=rows.map(function(r){ var cpl=r.ld>0?dv(r.sp,r.ld):null; var q=(r.A||0)+(r.B||0); var cq=q>0?dv(r.sp,q):null;
     return '<tr><td>'+fmtBR(r.date)+'</td>'
       +'<td class="num"><span class="heatcell" style="'+heatBg(rgb,r.sp/maxS)+'">'+money0(r.sp)+'</span></td>'
       +'<td class="num">'+intf(r.ld)+'</td>'

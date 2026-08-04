@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 $TAX          = 1.1385          # imposto Meta (+13,85%) em TODO gasto Meta
 $POPUP_START  = '2026-06-30'    # dia em que o funil Pop-up comecou a captar
 $TYPEFORM_TAG = 'typeform'      # token no nome da campanha = funil Typeform
-$QUALIFIED    = @('A','B','C')  # faixas de capital consideradas "qualificado" (>= R$200k)
+$QUALIFIED    = @('A','B')      # A = investidor ativo + R$500k+ ; B = investidor ativo (qualquer capital). Qualif = A+B.
 $TODAY        = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('yyyy-MM-dd')
 
 # ---- sources (read-only) --------------------------------------------
@@ -90,14 +90,13 @@ function DeDup($s){ $s=([string]$s).Trim(); $L=$s.Length; if($L -lt 3){ return $
 function CleanUtm($s){ $s=Norm $s; if($s -eq '' -or $s.IndexOf('{{') -ge 0){ return '' }; return (DeDup $s) }
 
 # faixa de capital (pergunta comum aos 2 mecanismos) -> A..E / NS
-function CapTier($s){ $t=Deacc $s
-  if($t -eq '' -or $t -like '*prefiro nao*'){ return 'NS' }
-  if($t -like '*acima*1 milhao*'){ return 'A' }
-  if($t -like '*500 mil*1 milhao*'){ return 'B' }
-  if($t -like '*200 mil*500 mil*'){ return 'C' }
-  if($t -like '*50 mil*200 mil*'){ return 'D' }
-  if($t -like '*ate*50 mil*'){ return 'E' }
-  return 'NS' }
+# Qualificacao (definida pelo usuario 04/08): A = "Sou investidor ativo" + capital >= R$500k (500k-1M OU acima de 1M);
+# B = "Sou investidor ativo" (qualquer capital); N = nao qualificado (nao e investidor ativo). Qualificado = A+B.
+function TierOf($capRaw,$expRaw){
+  if((Deacc $expRaw) -notlike '*investidor ativo*'){ return 'N' }
+  $c=Deacc $capRaw
+  if($c -like '*500 mil*1 milhao*' -or $c -like '*acima*1 milhao*'){ return 'A' }
+  return 'B' }
 function IsQualified($tier){ return ($QUALIFIED -contains $tier) }
 
 # ---- name interning (compartilhado) ---------------------------------
@@ -114,7 +113,7 @@ function New-Funnel($key,$label,$product,$kind){
     campDe=@{}; setDe=@{}; adDe=@{}; qPair=@{}; qTriple=@{}
     capDist=@{}; expDist=@{}; dispDist=@{}
     leads=0; leadsDated=0; leadsEst=0; attr=0
-    tiers=@{A=0;B=0;C=0;D=0;E=0;NS=0} }
+    tiers=@{A=0;B=0;N=0} }
 }
 function _grainNode($fn,$d,$ci,$si,$ai){
   $k="$d|$ci|$si|$ai"
@@ -122,7 +121,7 @@ function _grainNode($fn,$d,$ci,$si,$ai){
   return $fn.grain[$k]
 }
 function _dailyNode($fn,$d){
-  if(-not $fn.daily.ContainsKey($d)){ $fn.daily[$d]=[pscustomobject]@{ date=$d; sp=0.0;spr=0.0;im=0;ck=0;lp=0;ld=0; A=0;B=0;C=0;D=0;E=0;NS=0 } }
+  if(-not $fn.daily.ContainsKey($d)){ $fn.daily[$d]=[pscustomobject]@{ date=$d; sp=0.0;spr=0.0;im=0;ck=0;lp=0;ld=0; A=0;B=0;N=0 } }
   return $fn.daily[$d]
 }
 
@@ -207,8 +206,8 @@ function Load-Leads($csvPath,$fn,$startName){
   # ---- PASS 3: agrega (atribuicao + tier + distribuicoes) ----
   foreach($it in $items){ $r=$it.r; $d=$it.d
     $capRaw= if($Lcap -ge 0 -and $Lcap -lt $r.Count){ Norm $r[$Lcap] } else { '' }
-    $tier=CapTier $capRaw
     $expRaw= if($Lexp -ge 0 -and $Lexp -lt $r.Count){ Norm $r[$Lexp] } else { '' }
+    $tier=TierOf $capRaw $expRaw
     $dispRaw= if($Ldisp -ge 0 -and $Ldisp -lt $r.Count){ Norm $r[$Ldisp] } else { '' }
     $cName=MatchName ($r[$Lcamp]) $fn.campDe
     if($cName -eq ''){ $ci=$sent; $si=$sent; $ai=$sent }
@@ -241,8 +240,8 @@ function Funnel-Payload($fn){
   $qd=@($dd | Where-Object { $_.sp -gt 0 -or $_.im -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
   $ld=@($dd | Where-Object { $_.ld -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
   $dOut=New-Object System.Collections.ArrayList
-  foreach($o in $dd){ [void]$dOut.Add([pscustomobject]@{ date=$o.date; sp=[Math]::Round($o.sp,2); spr=[Math]::Round($o.spr,2); im=[int]$o.im; ck=[int]$o.ck; lp=[int]$o.lp; ld=[int]$o.ld; A=[int]$o.A; B=[int]$o.B; C=[int]$o.C; D=[int]$o.D; E=[int]$o.E; NS=[int]$o.NS }) }
-  $qlAll= $fn.tiers.A + $fn.tiers.B + $fn.tiers.C   # qualificado (>= R$200k) - alinhado a $QUALIFIED
+  foreach($o in $dd){ [void]$dOut.Add([pscustomobject]@{ date=$o.date; sp=[Math]::Round($o.sp,2); spr=[Math]::Round($o.spr,2); im=[int]$o.im; ck=[int]$o.ck; lp=[int]$o.lp; ld=[int]$o.ld; A=[int]$o.A; B=[int]$o.B; N=[int]$o.N }) }
+  $qlAll= $fn.tiers.A + $fn.tiers.B   # qualificado = A+B (investidor ativo)
   return [pscustomobject]@{
     key=$fn.key; label=$fn.label; product=$fn.product; kind=$fn.kind
     dateMin=$(if($qd.Count){$qd[0]}else{''}); dateMax=$(if($qd.Count){$qd[-1]}else{''})
