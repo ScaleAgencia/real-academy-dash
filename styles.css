@@ -159,6 +159,19 @@ b{font-weight:700}
 .tbl .empty{text-align:center;color:var(--muted2);padding:20px}
 .heatcell{display:inline-block;padding:2px 7px;border-radius:6px}
 .cpl-pill,.act{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.roas-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:800}
+.roas-g{background:rgba(47,227,160,.16);color:var(--green2)}
+.roas-a{background:rgba(240,184,74,.16);color:var(--warn)}
+.roas-r{background:rgba(242,99,126,.16);color:var(--neg)}
+.roas-n{color:var(--muted2)}
+.sales-card{border-color:rgba(217,180,90,.28)}
+.sales-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:12px}
+@media(max-width:900px){.sales-tiles{grid-template-columns:repeat(2,1fr)}}
+.stile{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+.stile.big{border-color:var(--line2);background:linear-gradient(180deg,#1a2417,var(--panel))}
+.stile .st-l{font-size:10.5px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.stile .st-v{font-size:22px;font-weight:800;letter-spacing:-.5px;margin:3px 0}
+.stile .st-s{font-size:10.5px;color:var(--muted)}
 .cpl-g{background:rgba(47,227,160,.15);color:var(--green2)}
 .cpl-a{background:rgba(240,184,74,.15);color:var(--warn)}
 .cpl-r{background:rgba(242,99,126,.15);color:var(--neg)}

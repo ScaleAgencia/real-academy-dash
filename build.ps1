@@ -42,6 +42,7 @@ $G_C_FLOW     = '2074063048'   # RA FLOW DIARIO
 $G_C_GROWTH   = '301064610'    # RA GROWTH DIARIO
 $G_Q_BUILD    = '822802163'    # Real-Build (queries)
 $G_L_BUILD_P  = '975680576'    # Build - Popup (leads)
+$G_C_BUILD    = '573878590'    # RA BUILD DIARIO (comercial: vendas/faturamento)
 $BUILD_CUTOFF = 'juliana'      # so conta leads da Juliana p/ baixo (acima dela = testes)
 
 # ---- helpers --------------------------------------------------------
@@ -286,13 +287,13 @@ function Load-Compare($csvPath){
 # leads da nossa planilha por dia (type+popup do produto) para overlay na aba 5
 function PlanilhaByDay($fnType,$fnPop){
   $m=@{}
-  foreach($fn in @($fnType,$fnPop)){ foreach($o in $fn.daily.Values){ if($o.date -match '^\d{4}-\d{2}-\d{2}$'){ if(-not $m.ContainsKey($o.date)){ $m[$o.date]=0 }; $m[$o.date]+=$o.ld } } }
+  foreach($fn in @($fnType,$fnPop)){ if($null -eq $fn){continue}; foreach($o in $fn.daily.Values){ if($o.date -match '^\d{4}-\d{2}-\d{2}$'){ if(-not $m.ContainsKey($o.date)){ $m[$o.date]=0 }; $m[$o.date]+=$o.ld } } }
   return $m
 }
 function Merge-Compare($comm,$planByDay,$fnType,$fnPop){
-  # gasto pelas queries (nosso) por dia = type+popup do produto
+  # gasto pelas queries (nosso) por dia = type+popup do produto (Build = so um funil, fnPop=$null)
   $qByDay=@{}
-  foreach($fn in @($fnType,$fnPop)){ foreach($o in $fn.daily.Values){ if($o.date -match '^\d{4}-\d{2}-\d{2}$'){ if(-not $qByDay.ContainsKey($o.date)){ $qByDay[$o.date]=0.0 }; $qByDay[$o.date]+=$o.sp } } }
+  foreach($fn in @($fnType,$fnPop)){ if($null -eq $fn){continue}; foreach($o in $fn.daily.Values){ if($o.date -match '^\d{4}-\d{2}-\d{2}$'){ if(-not $qByDay.ContainsKey($o.date)){ $qByDay[$o.date]=0.0 }; $qByDay[$o.date]+=$o.sp } } }
   $out=New-Object System.Collections.ArrayList
   foreach($c in $comm){ $pl= if($planByDay.ContainsKey($c.d)){ $planByDay[$c.d] } else { 0 }
     $qi= if($qByDay.ContainsKey($c.d)){ [Math]::Round($qByDay[$c.d],2) } else { 0.0 }
@@ -312,6 +313,7 @@ $lFT = Get-Sheet $LEADS_ID $G_L_FLOW_T   (Join-Path $dataDir 'l_flow_type.csv')
 $lFP = Get-Sheet $LEADS_ID $G_L_FLOW_P   (Join-Path $dataDir 'l_flow_popup.csv')
 $cFlow   = Get-Sheet $COMM_ID $G_C_FLOW   (Join-Path $dataDir 'c_flow.csv')
 $cGrowth = Get-Sheet $COMM_ID $G_C_GROWTH (Join-Path $dataDir 'c_growth.csv')
+$cBuild  = Get-Sheet $COMM_ID $G_C_BUILD  (Join-Path $dataDir 'c_build.csv')
 $qBuild  = Get-Sheet $QUERIES_ID $G_Q_BUILD  (Join-Path $dataDir 'q_build.csv')
 $lBuild  = Get-Sheet $LEADS_ID   $G_L_BUILD_P (Join-Path $dataDir 'l_build.csv')
 
@@ -338,6 +340,8 @@ $cmpGrowthRaw = Load-Compare $cGrowth
 $cmpFlowRaw   = Load-Compare $cFlow
 $cmpGrowth = Merge-Compare $cmpGrowthRaw (PlanilhaByDay $gType $gPop) $gType $gPop
 $cmpFlow   = Merge-Compare $cmpFlowRaw   (PlanilhaByDay $fType $fPop) $fType $fPop
+$cmpBuildRaw = Load-Compare $cBuild
+$cmpBuild  = Merge-Compare $cmpBuildRaw  (PlanilhaByDay $build $null) $build $null
 
 $nowIso=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $nowBR=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('dd/MM/yyyy HH:mm')
@@ -353,7 +357,7 @@ $payload=[pscustomobject]@{
     'flow-popup'=Funnel-Payload $fPop
     'build'=Funnel-Payload $build
   }
-  compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow) }
+  compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild) }
 }
 $utf8=[Text.UTF8Encoding]::new($false)
 $json=$payload | ConvertTo-Json -Depth 20 -Compress

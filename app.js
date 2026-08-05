@@ -122,6 +122,7 @@ function funnelShell(cfg,fn){
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Funil de captação <span class="hint">Meta Ads · imposto incluso · seta = vs. período anterior</span></div><div id="ffunnel"></div></div>'
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Leadscore — qualificação <span class="hint">A = investidor ativo + R$ 500 mil–1 mi · B = investidor ativo (qualquer capital) · qualificado = A+B</span></div><div id="fscore"></div></div>'
   +'</div>'
+  + ((cfg.isAll||cfg.standalone) ? '<div id="fsales" style="margin-top:16px"></div>' : '')
   +'<div class="row-2" style="margin-top:16px">'
   +'  <div class="card"><div class="card-h">Leads por dia <span class="hint">verde/ouro = qualificado no total</span></div><div id="fchartLeads"></div></div>'
   +'  <div class="card"><div class="card-h">Investimento × CPL por dia <span class="hint">barras = gasto c/ imposto · linha = CPL</span></div><div id="fchartCpl"></div></div>'
@@ -377,6 +378,57 @@ function renderInsights(cfg,fn,rng,isTudo){
   el('finsights').innerHTML=out.join('');
 }
 
+/* ---- Vendas & Faturamento (comercial) — nas abas Geral e Build ---- */
+function roasf(v){ return nf2.format(v||0)+'×'; }
+function roasCls(r){ if(!isFinite(r)||r<=0)return 'roas-n'; if(r>=1)return 'roas-g'; if(r>=0.7)return 'roas-a'; return 'roas-r'; }
+function salesChart(rows,accent){
+  var W=560,H=200,pl=36,pr=34,pt=12,pb=22,pw=W-pl-pr,ph=H-pt-pb,base=pt+ph;
+  var maxF=Math.max.apply(null,rows.map(function(r){return r.fat||0;}).concat([1]));
+  var roas=rows.map(function(r){return dv(r.fat,r.qInvest);});
+  var maxR=Math.max.apply(null,roas.concat([1]));
+  var n=rows.length||1,gw=pw/n,bw=Math.max(2,Math.min(15,gw*0.55));
+  var s='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+  [0,0.5,1].forEach(function(f){ var y=pt+ph*(1-f); s+='<line x1="'+pl+'" y1="'+y+'" x2="'+(W-pr)+'" y2="'+y+'" stroke="#123123" stroke-dasharray="2 3"/>';
+    s+='<text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end" fill="#4f7d68" font-size="9">'+Math.round(maxF*f/1000)+'k</text>';
+    s+='<text x="'+(W-pr+3)+'" y="'+(y+3)+'" text-anchor="start" fill="#c98a2a" font-size="9">'+nf1.format(maxR*f)+'×</text>'; });
+  if(maxR>0){ var y1=base-ph*clamp(1/maxR); s+='<line x1="'+pl+'" y1="'+y1.toFixed(1)+'" x2="'+(W-pr)+'" y2="'+y1.toFixed(1)+'" stroke="rgba(47,227,160,.4)" stroke-dasharray="4 3"/>'; }
+  rows.forEach(function(r,i){ var xc=pl+gw*i+gw/2, fh=ph*dv(r.fat,maxF); if(r.fat>0) s+='<rect x="'+(xc-bw/2).toFixed(1)+'" y="'+(base-fh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+fh.toFixed(1)+'" rx="1.5" fill="'+COL.gold+'" opacity=".5"/>'; });
+  var pts=[]; rows.forEach(function(r,i){ if(r.qInvest>0){ var xc=pl+gw*i+gw/2, y=base-ph*clamp(roas[i]/maxR); pts.push([xc,y]); } });
+  if(pts.length>1) s+='<path d="M'+pts.map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' L')+'" fill="none" stroke="'+accent+'" stroke-width="2"/>';
+  pts.forEach(function(p){ s+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.3" fill="'+accent+'"/>'; });
+  xticks(rows).forEach(function(i){ var xc=pl+gw*i+gw/2; s+='<text x="'+xc.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" fill="#4f7d68" font-size="9">'+fmtBR(rows[i].d)+'</text>'; });
+  s+=hitRects(rows.map(function(r){return {date:r.d};}),pl,gw,pt,ph)+'</svg>';
+  return '<div class="chart">'+s+'</div><div class="chart-legend"><span><span class="dot" style="background:'+COL.gold+';opacity:.6"></span>Faturamento</span><span><span class="ln" style="background:'+accent+'"></span>ROAS</span><span style="color:var(--muted2)">tracejado = break-even (1×)</span></div>';
+}
+function renderSales(cfg,rng,isTudo){
+  var host=el('fsales'); if(!host)return;
+  var prod=(cfg.product||'').toLowerCase();
+  var all=arr((D.compare||{})[prod]);
+  var last=-1; all.forEach(function(r,i){ if((r.fat||0)>0||(r.ingressos||0)>0||(r.qInvest||0)>0){last=i;} }); all=all.slice(0,last+1);
+  var rows = isTudo ? all : all.filter(function(r){return inRange(r.d,rng);});
+  var fat=0,ing=0,inv=0; rows.forEach(function(r){ fat+=r.fat||0; ing+=r.ingressos||0; inv+=r.qInvest||0; });
+  var roas=dv(fat,inv), ticket=dv(fat,ing), cpa=dv(inv,ing), lucro=fat-inv;
+  var tiles='<div class="sales-tiles">'
+    +'<div class="stile big"><div class="st-l">Faturamento</div><div class="st-v" style="color:'+COL.gold2+'">'+money0(fat)+'</div><div class="st-s">vendas de ingressos no período</div></div>'
+    +'<div class="stile"><div class="st-l">Ingressos vendidos</div><div class="st-v">'+intf(ing)+'</div><div class="st-s">ticket médio '+(ing?money(ticket):'—')+'</div></div>'
+    +'<div class="stile big"><div class="st-l">ROAS</div><div class="st-v"><span class="roas-pill '+roasCls(roas)+'" style="font-size:23px;padding:2px 12px">'+roasf(roas)+'</span></div><div class="st-s">faturamento ÷ investimento (c/ imposto)</div></div>'
+    +'<div class="stile"><div class="st-l">Investimento</div><div class="st-v">'+money0(inv)+'</div><div class="st-s">c/ imposto · custo/venda '+(ing?money(cpa):'—')+'</div></div>'
+    +'<div class="stile"><div class="st-l">Lucro (fat − invest)</div><div class="st-v '+(lucro>=0?'pos':'neg')+'">'+money0(lucro)+'</div><div class="st-s">'+(lucro>=0?'no lucro':'no prejuízo')+'</div></div>'
+    +'</div>';
+  var body='',chart='';
+  if(fat>0||ing>0){
+    chart='<div class="row-2" style="margin-top:6px"><div><div class="card-h" style="font-size:12px">Faturamento × ROAS por dia</div>'+salesChart(rows.slice().sort(function(a,b){return a.d.localeCompare(b.d);}),cfg.accent)+'</div>';
+    var dr=rows.slice().filter(function(r){return (r.fat||0)>0||(r.ingressos||0)>0;}).sort(function(a,b){return b.d.localeCompare(a.d);});
+    var trows=dr.map(function(r){ var rz=dv(r.fat,r.qInvest), tk=dv(r.fat,r.ingressos);
+      return '<tr><td>'+fmtBR(r.d)+'</td><td class="num" style="color:'+COL.gold2+'">'+money0(r.fat)+'</td><td class="num">'+intf(r.ingressos)+'</td><td class="num">'+money0(r.qInvest)+'</td><td class="num"><span class="roas-pill '+roasCls(rz)+'">'+roasf(rz)+'</span></td><td class="num">'+(r.ingressos?money(tk):'—')+'</td></tr>'; }).join('');
+    if(!trows)trows='<tr><td colspan="6" class="empty">Sem vendas no período.</td></tr>';
+    body='<div><div class="card-h" style="font-size:12px">Vendas dia a dia</div><div class="table-scroll" style="max-height:280px;overflow-y:auto"><table class="tbl"><thead><tr><th>Dia</th><th>Faturamento</th><th>Ingressos</th><th>Invest.</th><th>ROAS</th><th>Ticket</th></tr></thead><tbody>'+trows+'</tbody></table></div></div></div>';
+  } else {
+    chart='<div class="empty" style="padding:16px">Nenhuma venda registrada ainda neste funil (o comercial preenche faturamento e ingressos por dia na planilha).</div>';
+  }
+  host.innerHTML='<div class="card sales-card"><div class="card-h">🎟️ Vendas &amp; Faturamento <span class="hint">da planilha do comercial · '+esc(cfg.product)+' (pop-up + typeform somados) · ROAS = faturamento ÷ investimento c/ imposto · reage ao filtro de data</span></div>'+tiles+chart+body+'</div>';
+}
+
 /* ---- funnel orchestration ---- */
 function renderFunnel(fk){
   var fn=FN[fk], cfg=CFG[fk];
@@ -395,6 +447,7 @@ function renderFunnelData(fk){
     warn.innerHTML = notes.length ? notes.map(function(n){return '<div class="warnbar">'+n+'</div>';}).join('') : '';
   }
   renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p); renderScore(cfg,fn,a);
+  if(cfg.isAll||cfg.standalone){ renderSales(cfg,rng,isTudo); }
   renderChartLeads(cfg,days); renderChartCpl(cfg,days); renderDist(cfg,fn);
   renderInsights(cfg,fn,rng,isTudo); renderDaily(cfg,fn,rng); renderTree(cfg,fn,rng,isTudo);
 }
