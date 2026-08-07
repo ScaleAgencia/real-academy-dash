@@ -47,7 +47,10 @@ $BUILD_CUTOFF = 'juliana'      # so conta leads da Juliana p/ baixo (acima dela 
 
 # ---- helpers --------------------------------------------------------
 function Get-Sheet($id,$gid,$out){
-  $url = "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid"
+  # &headers=1 = FORCA 1 linha de cabecalho. Sem isso, a auto-deteccao do gviz as vezes
+  # trata centenas de linhas como header e cola tudo no rotulo -> sheet "some" (bug real
+  # que zerou o growth-popup em ago/2026). headers=1 e correto p/ todas as abas (1 header).
+  $url = "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid&headers=1"
   if($env:RA_REUSE -eq '1' -and (Test-Path $out)){ return $out }
   for($try=1;$try -le 4;$try++){
     try{ $wc=New-Object System.Net.WebClient; $wc.Encoding=[Text.Encoding]::UTF8
