@@ -15,17 +15,18 @@
 
   <header class="top">
     <div class="brand">
-      <svg class="blogo" viewBox="0 0 68 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <svg class="blogo" viewBox="0 0 84 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <defs>
-          <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#e6c877"/><stop offset=".5" stop-color="#c99a3a"/><stop offset="1" stop-color="#a97b28"/>
+          <linearGradient id="rg" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#a97b28"/><stop offset=".5" stop-color="#c99a3a"/><stop offset="1" stop-color="#e9cf8a"/>
           </linearGradient>
         </defs>
-        <g fill="none" stroke="url(#rg)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 90 V30 a19 19 0 0 1 38 0 V47"/>
-          <path d="M27 52 L53 90"/>
-        </g>
-        <circle cx="42" cy="44" r="4.6" fill="url(#rg)"/>
+        <!-- haste + arco + contador (vazado por evenodd), pé inclinado -->
+        <path fill="url(#rg)" fill-rule="evenodd" d="M6 94 V26 A27 27 0 0 1 60 26 V54 H41 V26 A10 10 0 0 0 24 26 V72 Z"/>
+        <!-- perna (paralelogramo) -->
+        <path fill="url(#rg)" d="M33 54 H55 L76 94 H54 Z"/>
+        <!-- ponto -->
+        <circle cx="46" cy="44" r="4.6" fill="url(#rg)"/>
       </svg>
       <div>
         <div class="logo"><span class="l1">real</span><span class="l2">academy</span></div>
