@@ -62,15 +62,6 @@ FN['growth-all']=combineFunnels('growth-all',FN['growth-type'],FN['growth-popup'
 FN['flow-all']  =combineFunnels('flow-all',  FN['flow-type'],  FN['flow-popup']);
 CFG['growth-all']={ product:'Growth', kind:'Visão Geral', accent:COL.green, flow:false, hasDisp:true, isAll:true };
 CFG['flow-all']  ={ product:'Flow',   kind:'Visão Geral', accent:COL.flow,  flow:true,  hasDisp:true, isAll:true };
-// aba GERAL TOTAL = soma de todos os funis (growth-all + flow-all + build)
-FN['total']=combineFunnels('total', combineFunnels('_gf', FN['growth-all'], FN['flow-all']), FN['build']);
-CFG['total']={ product:'Real Academy', kind:'Visão Geral', accent:COL.gold, flow:false, hasDisp:true, isAll:true, isTotal:true, pal:['#f0d38f','#d9b45a','#b8942f','#2fe3a0'], rgb:'217,180,90' };
-// allKey = funil combinado do produto (denominador da conversão) ; salesKey = produto no compare (vendas)
-(function(){
-  var AK={'growth-popup':'growth-all','growth-type':'growth-all','growth-all':'growth-all','flow-popup':'flow-all','flow-type':'flow-all','flow-all':'flow-all','build':'build','total':'total'};
-  var SK={'growth-popup':'growth','growth-type':'growth','growth-all':'growth','flow-popup':'flow','flow-type':'flow','flow-all':'flow','build':'build','total':'__all__'};
-  Object.keys(CFG).forEach(function(k){ CFG[k].allKey=AK[k]; CFG[k].salesKey=SK[k]; });
-})();
 var TIER = [
   {k:'A',label:'A · investidor ativo + R$ 500 mil–1 mi',color:'#2fe3a0'},
   {k:'B',label:'B · investidor ativo',color:'#7bd88a'},
@@ -83,7 +74,7 @@ var B=bounds(), minDate=B[0], maxDate=B[1];
 function addDays(iso,n){ var p=iso.split('-'); var dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function daysBetween(a,b){ var pa=a.split('-'),pb=b.split('-'); return Math.round((Date.UTC(+pb[0],+pb[1]-1,+pb[2])-Date.UTC(+pa[0],+pa[1]-1,+pa[2]))/86400000); }
 function inRange(dt,r){ return isDate(dt) && dt>=r[0] && dt<=r[1]; }
-var PRESETS=[{k:'hoje',label:'Hoje'},{k:'ontem',label:'Ontem'},{k:'mes',label:'Este mês'},{k:'7d',label:'7 dias'},{k:'14d',label:'14 dias'},{k:'30d',label:'30 dias'},{k:'tudo',label:'Tudo'}];
+var PRESETS=[{k:'hoje',label:'Hoje'},{k:'ontem',label:'Ontem'},{k:'mes',label:'Este mês'},{k:'7d',label:'7 dias'},{k:'30d',label:'30 dias'},{k:'tudo',label:'Tudo'}];
 var period='tudo', customRange=null;
 function rangeFor(k){
   if(k==='custom'&&customRange) return customRange;
@@ -91,7 +82,6 @@ function rangeFor(k){
   if(k==='ontem'){ var y=addDays(maxDate,-1); return [y,y]; }
   if(k==='mes') return [maxDate.slice(0,7)+'-01',maxDate];
   if(k==='7d') return [addDays(maxDate,-6),maxDate];
-  if(k==='14d') return [addDays(maxDate,-13),maxDate];
   if(k==='30d') return [addDays(maxDate,-29),maxDate];
   return [minDate,maxDate];
 }
@@ -118,8 +108,7 @@ function trendHTML(cur,prev,higherBetter){ if(prev==null||!isFinite(prev)||prev=
 function funnelShell(cfg,fn){
   var acc=cfg.flow?'flow':'g';
   var note='';
-  if(cfg.isTotal){ note='<b>Todos os funis somados</b> (Growth + Flow + Build) · leads, investimento, qualificação, vendas e ROAS do Real Academy inteiro (imposto incluso).'; }
-  else if(cfg.standalone){ note='Funil <b>'+esc(cfg.product)+'</b> · investimento = todas as campanhas da query (imposto incluso). Funil novo — poucos dias de dados.'; }
+  if(cfg.standalone){ note='Funil <b>'+esc(cfg.product)+'</b> · investimento = todas as campanhas da query (imposto incluso). Funil novo — poucos dias de dados.'; }
   else if(cfg.isAll){ note='<b>Pop-up + Typeform somados</b> · todos os leads, gasto e campanhas do '+esc(cfg.product)+' (imposto incluso).'; }
   else if(cfg.kind==='Typeform'){ note='Investimento = campanhas com <b>"typeform"</b> no nome + todo o gasto antes de 30/06 (quando só existia o Typeform).'; }
   else { note='Investimento = campanhas <b>sem "typeform"</b> a partir de 30/06 (lançamento do Pop-up).'; }
@@ -166,7 +155,7 @@ function renderKpi(cfg,fn,a,p){
 
 var FN_W=[100,74,52,34], FN_COL=['#5cf0b8','#2fe3a0','#1ba97a','#d9b45a'];
 var FN_COL_F=['#7ad4f0','#46bfe6','#2f8fb8','#d9b45a'];
-function renderFunnelViz(cfg,a,p,sales){
+function renderFunnelViz(cfg,a,p){
   var cols=cfg.pal||(cfg.flow?FN_COL_F:FN_COL);
   var stages=[
     {l:'Impressões',v:a.impr,cost:'CPM',cf:dv(a.spend,a.impr)*1000,rate:'CTR',rf:dv(a.clicks,a.impr),pcf:dv(p.spend,p.impr)*1000,prf:dv(p.clicks,p.impr)},
@@ -185,11 +174,6 @@ function renderFunnelViz(cfg,a,p,sales){
     if(i<stages.length-1) html+='<div class="fn-rate"><span class="ar">↓</span></div>';
   }
   html+='</div>';
-  if(sales){ var conv=dv(sales.ing,sales.prodLeads), cpv=dv(a.spend,sales.ing);
-    html+='<div class="fn-conv"><span class="ar">↓</span>'
-      +'<div class="fn-conv-box"><span class="fc-l">Conversão em vendas</span>'
-      +'<span class="fc-v">'+nf2.format(conv*100)+'%</span>'
-      +'<span class="fc-s"><b>'+intf(sales.ing)+'</b> venda'+(sales.ing===1?'':'s')+' (ingressos) · custo/venda <b>'+(sales.ing?money0(cpv):'—')+'</b></span></div></div>'; }
   el('ffunnel').innerHTML=html;
 }
 
@@ -416,15 +400,10 @@ function salesChart(rows,accent){
   s+=hitRects(rows.map(function(r){return {date:r.d};}),pl,gw,pt,ph)+'</svg>';
   return '<div class="chart">'+s+'</div><div class="chart-legend"><span><span class="dot" style="background:'+COL.gold+';opacity:.6"></span>Faturamento</span><span><span class="ln" style="background:'+accent+'"></span>ROAS</span><span style="color:var(--muted2)">tracejado = break-even (1×)</span></div>';
 }
-function salesRows(salesKey){
-  if(salesKey!=='__all__'){ return arr((D.compare||{})[salesKey]); }
-  var m={}; ['growth','flow','build'].forEach(function(pk){ arr((D.compare||{})[pk]).forEach(function(r){ var x=m[r.d]||(m[r.d]={d:r.d,fat:0,ingressos:0,qInvest:0}); x.fat+=r.fat||0; x.ingressos+=r.ingressos||0; x.qInvest+=r.qInvest||0; }); });
-  return Object.keys(m).map(function(k){return m[k];}).sort(function(a,b){return a.d.localeCompare(b.d);});
-}
-function salesAgg(salesKey,rng,isTudo){ var fat=0,ing=0,inv=0; salesRows(salesKey).forEach(function(r){ if(isTudo||inRange(r.d,rng)){ fat+=r.fat||0; ing+=r.ingressos||0; inv+=r.qInvest||0; } }); return {fat:fat,ing:ing,inv:inv}; }
 function renderSales(cfg,rng,isTudo){
   var host=el('fsales'); if(!host)return;
-  var all=salesRows(cfg.salesKey);
+  var prod=(cfg.product||'').toLowerCase();
+  var all=arr((D.compare||{})[prod]);
   var last=-1; all.forEach(function(r,i){ if((r.fat||0)>0||(r.ingressos||0)>0||(r.qInvest||0)>0){last=i;} }); all=all.slice(0,last+1);
   var rows = isTudo ? all : all.filter(function(r){return inRange(r.d,rng);});
   var fat=0,ing=0,inv=0; rows.forEach(function(r){ fat+=r.fat||0; ing+=r.ingressos||0; inv+=r.qInvest||0; });
@@ -447,7 +426,7 @@ function renderSales(cfg,rng,isTudo){
   } else {
     chart='<div class="empty" style="padding:16px">Nenhuma venda registrada ainda neste funil (o comercial preenche faturamento e ingressos por dia na planilha).</div>';
   }
-  host.innerHTML='<div class="card sales-card"><div class="card-h">🎟️ Vendas &amp; Faturamento <span class="hint">da planilha do comercial · '+esc(cfg.product)+' ('+(cfg.isTotal?'todos os funis somados':'pop-up + typeform somados')+') · ROAS = faturamento ÷ investimento c/ imposto · reage ao filtro de data</span></div>'+tiles+chart+body+'</div>';
+  host.innerHTML='<div class="card sales-card"><div class="card-h">🎟️ Vendas &amp; Faturamento <span class="hint">da planilha do comercial · '+esc(cfg.product)+' (pop-up + typeform somados) · ROAS = faturamento ÷ investimento c/ imposto · reage ao filtro de data</span></div>'+tiles+chart+body+'</div>';
 }
 
 /* ---- funnel orchestration ---- */
@@ -467,9 +446,7 @@ function renderFunnelData(fk){
     if(noCamp>0.4*(fn.totals.leads||1)){ notes.push('ℹ <b>'+intf(noCamp)+'</b> dos '+intf(fn.totals.leads)+' leads (<b>'+nf1.format(100*noCamp/(fn.totals.leads||1))+'%</b>) são de meses cujas campanhas <b>não estão na query atual</b> (histórico removido). Contam como lead, mas sem gasto atribuído — então o <b>CPL do “Tudo” fica subestimado</b>. <b>Os períodos recentes (mês/30 dias) estão corretos.</b>'); }
     warn.innerHTML = notes.length ? notes.map(function(n){return '<div class="warnbar">'+n+'</div>';}).join('') : '';
   }
-  var sInfo=salesAgg(cfg.salesKey,rng,isTudo);
-  var prodLeads=(FN[cfg.allKey]?aggFunnel(FN[cfg.allKey],rng,isTudo).leads:a.leads);
-  renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p,{ing:sInfo.ing,prodLeads:prodLeads}); renderScore(cfg,fn,a);
+  renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p); renderScore(cfg,fn,a);
   if(cfg.isAll||cfg.standalone){ renderSales(cfg,rng,isTudo); }
   renderChartLeads(cfg,days); renderChartCpl(cfg,days); renderDist(cfg,fn);
   renderInsights(cfg,fn,rng,isTudo); renderDaily(cfg,fn,rng); renderTree(cfg,fn,rng,isTudo);
@@ -563,8 +540,8 @@ function renderCompare(){
 /* =================================================================
    TABS + PERÍODO
 ==================================================================*/
-var TABS=['total','growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','compare'];
-var active='total';
+var TABS=['growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','compare'];
+var active='growth-all';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
 function activateTab(id){ active=id;
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){ x.classList.toggle('active',x.getAttribute('data-tab')===id); });
