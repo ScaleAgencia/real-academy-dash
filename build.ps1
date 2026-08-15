@@ -260,6 +260,28 @@ function Funnel-Payload($fn){
   }
 }
 
+# ---- OVERRIDE pontual pedido pelo usuario (15/08/2026) ---------------
+# So HOJE (15/08) e SO no funil BUILD: mostrar gasto FIXO na dash, ignorando o real.
+# Trava por data -> a partir de 16/08 nao casa e tudo volta ao real sozinho (sem mexer aqui).
+# Mexe SO em sp (com imposto) / spr (sem imposto); leads/qualif ficam intactos.
+# $showWithTax = numero que aparece no investimento COM imposto (hero da dash).
+function Override-BuildSpend($fn,$date,$showWithTax){
+  $rawTarget = [Math]::Round($showWithTax / $TAX, 2)
+  # 1) arvore (grain Campanha>Conjunto>Anuncio): re-escala proporcional p/ somar o alvo
+  $gk = @($fn.grain.Keys | Where-Object { $fn.grain[$_].d -eq $date })
+  $curSp = 0.0; foreach($k in $gk){ $curSp += $fn.grain[$k].sp }
+  if($gk.Count -gt 0 -and $curSp -gt 0){
+    $f = $showWithTax / $curSp
+    foreach($k in $gk){ $g=$fn.grain[$k]; $g.sp=[Math]::Round($g.sp*$f,2); $g.spr=[Math]::Round($g.spr*$f,2) }
+  } else {
+    # ainda sem gasto real hoje: injeta 1 no sintetico p/ a arvore/KPI baterem
+    $ci=Intern '(campanhas Build)'; $si=Intern '(sem rastreio)'; $ai=Intern '(sem rastreio)'
+    $g=_grainNode $fn $date $ci $si $ai; $g.sp=$showWithTax; $g.spr=$rawTarget
+  }
+  # 2) diario (KPI/graficos/compare qInvest): forca o total do dia
+  $o=_dailyNode $fn $date; $o.sp=$showWithTax; $o.spr=$rawTarget
+}
+
 # ---- 4) comparativo diario (planilha comercial, transposta) ----------
 function Load-Compare($csvPath){
   $rows=Read-Csv $csvPath
@@ -337,6 +359,10 @@ Load-Leads $lGP $gPop
 Load-Leads $lFT $fType
 Load-Leads $lFP $fPop
 Load-Leads $lBuild $build $BUILD_CUTOFF   # so conta da Juliana p/ baixo (acima = testes)
+
+# OVERRIDE pontual (pedido usuario): so 15/08/2026 e so no Build, mostrar gasto fixo R$502 (com imposto).
+# Ativa SOMENTE enquanto hoje for 15/08 -> a partir de 16/08 nao roda e ate o proprio 15/08 volta ao real.
+if($TODAY -eq '2026-08-15'){ Override-BuildSpend $build '2026-08-15' 502.0 }
 
 Write-Host "Comparativo diario..."
 $cmpGrowthRaw = Load-Compare $cGrowth
