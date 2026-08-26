@@ -17,7 +17,7 @@ function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function isDate(x){ return /^\d{4}-\d{2}-\d{2}$/.test(x); }
 function fmtBR(iso){ if(!isDate(iso)) return iso; var p=iso.split('-'); return p[2]+'/'+p[1]; }
-var COL={green:'#2fe3a0',green2:'#5cf0b8',gold:'#d9b45a',gold2:'#f0d38f',flow:'#46bfe6',flow2:'#7ad4f0',meta:'#8fbef0',muted:'#83b09c',build:'#a78bfa',build2:'#c4b5fd'};
+var COL={green:'#2fe3a0',green2:'#5cf0b8',gold:'#d9b45a',gold2:'#f0d38f',flow:'#46bfe6',flow2:'#7ad4f0',meta:'#8fbef0',muted:'#83b09c',build:'#a78bfa',build2:'#c4b5fd',arr:'#f0993a',arr2:'#f6b968',exp:'#e56db0',exp2:'#f2a6d8'};
 
 /* ---------- funnels ---------- */
 function prep(key,label){
@@ -33,14 +33,18 @@ var FN = {
   'growth-type':  prep('growth-type','Growth · Typeform'),
   'flow-popup':   prep('flow-popup','Flow · Pop-up'),
   'flow-type':    prep('flow-type','Flow · Typeform'),
-  'build':        prep('build','Build · Pop-up')
+  'build':        prep('build','Build · Pop-up'),
+  'arremate':     prep('arremate','Arremate · Pop-up'),
+  'experience':   prep('experience','Experience · Pop-up')
 };
 var CFG = {
   'growth-popup':{ product:'Growth', kind:'Pop-up',   accent:COL.green, flow:false, hasDisp:false },
   'growth-type': { product:'Growth', kind:'Typeform', accent:COL.green, flow:false, hasDisp:true },
   'flow-popup':  { product:'Flow',   kind:'Pop-up',   accent:COL.flow,  flow:true,  hasDisp:false },
   'flow-type':   { product:'Flow',   kind:'Typeform', accent:COL.flow,  flow:true,  hasDisp:true },
-  'build':       { product:'Build',  kind:'Pop-up',   accent:COL.build, flow:false, hasDisp:false, standalone:true, pal:['#c4b5fd','#a78bfa','#8b6fe0','#d9b45a'], rgb:'167,139,250' }
+  'build':       { product:'Build',  kind:'Pop-up',   accent:COL.build, flow:false, hasDisp:false, standalone:true, pal:['#c4b5fd','#a78bfa','#8b6fe0','#d9b45a'], rgb:'167,139,250' },
+  'arremate':    { product:'Arremate',  kind:'Pop-up', accent:COL.arr, flow:false, hasDisp:false, standalone:true, pal:['#f6b968','#f0993a','#d1701a','#d9b45a'], rgb:'240,153,58' },
+  'experience':  { product:'Experience',kind:'Pop-up', accent:COL.exp, flow:false, hasDisp:false, standalone:true, pal:['#f2a6d8','#e56db0','#c44d92','#d9b45a'], rgb:'229,109,176' }
 };
 /* ---------- visão geral por produto (soma Pop-up + Typeform; split disjunto = sem duplicação) ---------- */
 function mergeDistArr(a,b){ var m={}; arr(a).concat(arr(b)).forEach(function(x){ if(!x)return; m[x.label]=(m[x.label]||0)+(x.count||0); });
@@ -62,13 +66,17 @@ FN['growth-all']=combineFunnels('growth-all',FN['growth-type'],FN['growth-popup'
 FN['flow-all']  =combineFunnels('flow-all',  FN['flow-type'],  FN['flow-popup']);
 CFG['growth-all']={ product:'Growth', kind:'Visão Geral', accent:COL.green, flow:false, hasDisp:true, isAll:true };
 CFG['flow-all']  ={ product:'Flow',   kind:'Visão Geral', accent:COL.flow,  flow:true,  hasDisp:true, isAll:true };
-// aba GERAL TOTAL = soma de todos os funis (growth-all + flow-all + build)
-FN['total']=combineFunnels('total', combineFunnels('_gf', FN['growth-all'], FN['flow-all']), FN['build']);
+// aba GERAL TOTAL = soma de TODOS os funis (growth-all + flow-all + build + arremate + experience)
+FN['total']=combineFunnels('total',
+  combineFunnels('_gfba',
+    combineFunnels('_gfb', combineFunnels('_gf', FN['growth-all'], FN['flow-all']), FN['build']),
+    FN['arremate']),
+  FN['experience']);
 CFG['total']={ product:'Real Academy', kind:'Visão Geral', accent:COL.gold, flow:false, hasDisp:true, isAll:true, isTotal:true, pal:['#f0d38f','#d9b45a','#b8942f','#2fe3a0'], rgb:'217,180,90' };
 // allKey = funil combinado do produto (denominador da conversão) ; salesKey = produto no compare (vendas)
 (function(){
-  var AK={'growth-popup':'growth-all','growth-type':'growth-all','growth-all':'growth-all','flow-popup':'flow-all','flow-type':'flow-all','flow-all':'flow-all','build':'build','total':'total'};
-  var SK={'growth-popup':'growth','growth-type':'growth','growth-all':'growth','flow-popup':'flow','flow-type':'flow','flow-all':'flow','build':'build','total':'__all__'};
+  var AK={'growth-popup':'growth-all','growth-type':'growth-all','growth-all':'growth-all','flow-popup':'flow-all','flow-type':'flow-all','flow-all':'flow-all','build':'build','arremate':'arremate','experience':'experience','total':'total'};
+  var SK={'growth-popup':'growth','growth-type':'growth','growth-all':'growth','flow-popup':'flow','flow-type':'flow','flow-all':'flow','build':'build','arremate':'arremate','experience':'experience','total':'__all__'};
   Object.keys(CFG).forEach(function(k){ CFG[k].allKey=AK[k]; CFG[k].salesKey=SK[k]; });
 })();
 var TIER = [
@@ -418,7 +426,7 @@ function salesChart(rows,accent){
 }
 function salesRows(salesKey){
   if(salesKey!=='__all__'){ return arr((D.compare||{})[salesKey]); }
-  var m={}; ['growth','flow','build'].forEach(function(pk){ arr((D.compare||{})[pk]).forEach(function(r){ var x=m[r.d]||(m[r.d]={d:r.d,fat:0,ingressos:0,qInvest:0}); x.fat+=r.fat||0; x.ingressos+=r.ingressos||0; x.qInvest+=r.qInvest||0; }); });
+  var m={}; ['growth','flow','build','arremate','experience'].forEach(function(pk){ arr((D.compare||{})[pk]).forEach(function(r){ var x=m[r.d]||(m[r.d]={d:r.d,fat:0,ingressos:0,qInvest:0}); x.fat+=r.fat||0; x.ingressos+=r.ingressos||0; x.qInvest+=r.qInvest||0; }); });
   return Object.keys(m).map(function(k){return m[k];}).sort(function(a,b){return a.d.localeCompare(b.d);});
 }
 function salesAgg(salesKey,rng,isTudo){ var fat=0,ing=0,inv=0; salesRows(salesKey).forEach(function(r){ if(isTudo||inRange(r.d,rng)){ fat+=r.fat||0; ing+=r.ingressos||0; inv+=r.qInvest||0; } }); return {fat:fat,ing:ing,inv:inv}; }
@@ -563,7 +571,7 @@ function renderCompare(){
 /* =================================================================
    TABS + PERÍODO
 ==================================================================*/
-var TABS=['total','growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','compare'];
+var TABS=['total','growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','arremate','experience','compare'];
 var active='total';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
 function activateTab(id){ active=id;
@@ -588,8 +596,8 @@ function initPeriods(){ el('periods').innerHTML=periodsHTML();
   de.addEventListener('change',onDate); at.addEventListener('change',onDate); syncPeriodUI(); }
 
 function initCoverage(){ el('updated').textContent=D.generatedAtBR||'—'; if(el('taxf'))el('taxf').textContent=(D.taxMultiplier||1.1385).toFixed(4).replace('.',',');
-  var totLeads=0,totQ=0,totSpend=0; ['growth-popup','growth-type','flow-popup','flow-type','build'].forEach(function(k){ if(!FN[k])return; var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
-  el('coverage').innerHTML='<b>'+intf(totLeads)+'</b> leads captados · <b>'+intf(totQ)+'</b> qualificados · <b>'+money0(totSpend)+'</b> investidos (c/ imposto) · Growth · Flow · Build · janela até '+fmtBR(maxDate)+'. '
+  var totLeads=0,totQ=0,totSpend=0; ['growth-popup','growth-type','flow-popup','flow-type','build','arremate','experience'].forEach(function(k){ if(!FN[k])return; var t=FN[k].totals; totLeads+=t.leads||0; totQ+=t.qualified||0; totSpend+=t.spend||0; });
+  el('coverage').innerHTML='<b>'+intf(totLeads)+'</b> leads captados · <b>'+intf(totQ)+'</b> qualificados · <b>'+money0(totSpend)+'</b> investidos (c/ imposto) · Growth · Flow · Build · Arremate · Experience · janela até '+fmtBR(maxDate)+'. '
     +'Pop-up desde 30/06/2026 · Typeform (campanhas dedicadas) desde 14/05/2026 · Build desde 01/08/2026.'; }
 
 if(!D.funnels){ el('coverage').innerHTML='<b>Sem dados.</b> Rode o build.ps1 para gerar o data.js.'; }

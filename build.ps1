@@ -44,6 +44,14 @@ $G_Q_BUILD    = '822802163'    # Real-Build (queries)
 $G_L_BUILD_P  = '975680576'    # Build - Popup (leads)
 $G_C_BUILD    = '573878590'    # RA BUILD DIARIO (comercial: vendas/faturamento)
 $BUILD_CUTOFF = 'juliana'      # so conta leads da Juliana p/ baixo (acima dela = testes)
+# --- funis novos (add 19/08): Arremate + Experience (standalone Pop-up, igual Build) ---
+# ATENCAO: gids conferidos pelo NOME da aba (o usuario colou gids trocados/duplicados). Queries: aba "Arremate"=1170576470, "Real Experience"=1577794962.
+$G_Q_ARR      = '1170576470'   # queries aba "Arremate"
+$G_Q_EXP      = '1577794962'   # queries aba "Real Experience"
+$G_L_ARR_P    = '972106590'    # leads aba "Arremate - Popup"
+$G_L_EXP_P    = '1277316158'   # leads aba "Experience - Popup"
+$G_C_ARR      = '1284944705'   # comercial "RA ARREMATE DIARIO"
+$G_C_EXP      = '1665362188'   # comercial "RA EXPERIENCE"
 
 # ---- helpers --------------------------------------------------------
 function Get-Sheet($id,$gid,$out){
@@ -341,17 +349,27 @@ $cGrowth = Get-Sheet $COMM_ID $G_C_GROWTH (Join-Path $dataDir 'c_growth.csv')
 $cBuild  = Get-Sheet $COMM_ID $G_C_BUILD  (Join-Path $dataDir 'c_build.csv')
 $qBuild  = Get-Sheet $QUERIES_ID $G_Q_BUILD  (Join-Path $dataDir 'q_build.csv')
 $lBuild  = Get-Sheet $LEADS_ID   $G_L_BUILD_P (Join-Path $dataDir 'l_build.csv')
+$qArr    = Get-Sheet $QUERIES_ID $G_Q_ARR   (Join-Path $dataDir 'q_arr.csv')
+$lArr    = Get-Sheet $LEADS_ID   $G_L_ARR_P (Join-Path $dataDir 'l_arr.csv')
+$cArr    = Get-Sheet $COMM_ID    $G_C_ARR   (Join-Path $dataDir 'c_arr.csv')
+$qExp    = Get-Sheet $QUERIES_ID $G_Q_EXP   (Join-Path $dataDir 'q_exp.csv')
+$lExp    = Get-Sheet $LEADS_ID   $G_L_EXP_P (Join-Path $dataDir 'l_exp.csv')
+$cExp    = Get-Sheet $COMM_ID    $G_C_EXP   (Join-Path $dataDir 'c_exp.csv')
 
 $gType = New-Funnel 'growth-type'  'Growth Typeform' 'growth' 'type'
 $gPop  = New-Funnel 'growth-popup' 'Growth Pop-up'   'growth' 'popup'
 $fType = New-Funnel 'flow-type'    'Flow Typeform'   'flow'   'type'
 $fPop  = New-Funnel 'flow-popup'   'Flow Pop-up'     'flow'   'popup'
 $build = New-Funnel 'build'        'Build'           'build'  'popup'
+$arr   = New-Funnel 'arremate'     'Arremate'        'arremate'   'popup'
+$exp   = New-Funnel 'experience'   'Experience'      'experience' 'popup'
 
 Write-Host "Processando queries (fase+tag)..."
 Load-Queries $qGrowth 'growth' $gType $gPop
 Load-Queries $qFlow   'flow'   $fType $fPop
 Load-Queries $qBuild  'build'  $build $build   # Build = funil unico (todo o gasto p/ o mesmo funil)
+Load-Queries $qArr    'arremate'   $arr $arr   # standalone: todo o gasto p/ o mesmo funil
+Load-Queries $qExp    'experience' $exp $exp
 
 Write-Host "Processando leads..."
 Load-Leads $lGT $gType
@@ -359,6 +377,8 @@ Load-Leads $lGP $gPop
 Load-Leads $lFT $fType
 Load-Leads $lFP $fPop
 Load-Leads $lBuild $build $BUILD_CUTOFF   # so conta da Juliana p/ baixo (acima = testes)
+Load-Leads $lArr $arr                     # sem cutoff (ajustar se houver testes no topo)
+Load-Leads $lExp $exp
 
 # OVERRIDE pontual (pedido usuario): so 15/08/2026 e so no Build, mostrar gasto fixo R$502 (com imposto).
 # Ativa SOMENTE enquanto hoje for 15/08 -> a partir de 16/08 nao roda e ate o proprio 15/08 volta ao real.
@@ -371,6 +391,10 @@ $cmpGrowth = Merge-Compare $cmpGrowthRaw (PlanilhaByDay $gType $gPop) $gType $gP
 $cmpFlow   = Merge-Compare $cmpFlowRaw   (PlanilhaByDay $fType $fPop) $fType $fPop
 $cmpBuildRaw = Load-Compare $cBuild
 $cmpBuild  = Merge-Compare $cmpBuildRaw  (PlanilhaByDay $build $null) $build $null
+$cmpArrRaw = Load-Compare $cArr
+$cmpArr    = Merge-Compare $cmpArrRaw  (PlanilhaByDay $arr $null) $arr $null
+$cmpExpRaw = Load-Compare $cExp
+$cmpExp    = Merge-Compare $cmpExpRaw  (PlanilhaByDay $exp $null) $exp $null
 
 $nowIso=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $nowBR=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('dd/MM/yyyy HH:mm')
@@ -385,14 +409,16 @@ $payload=[pscustomobject]@{
     'flow-type'=Funnel-Payload $fType
     'flow-popup'=Funnel-Payload $fPop
     'build'=Funnel-Payload $build
+    'arremate'=Funnel-Payload $arr
+    'experience'=Funnel-Payload $exp
   }
-  compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild) }
+  compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild); arremate=@($cmpArr); experience=@($cmpExp) }
 }
 $utf8=[Text.UTF8Encoding]::new($false)
 $json=$payload | ConvertTo-Json -Depth 20 -Compress
 [IO.File]::WriteAllText((Join-Path $root 'data.js'), ("window.REALACAD="+$json+";`nwindow.REALACAD_OK=true;"), $utf8)
 
-foreach($fn in @($gType,$gPop,$fType,$fPop,$build)){
+foreach($fn in @($gType,$gPop,$fType,$fPop,$build,$arr,$exp)){
   $t=$fn.tiers; $q=$t.A+$t.B+$t.C
   Write-Host ("OK {0,-16} leads={1,5} (datados {2,5})  qualif={3,4}  gasto+imp=R$ {4}  attr={5}" -f `
     $fn.key,$fn.leads,$fn.leadsDated,$q,(([Math]::Round((($fn.daily.Values|Measure-Object sp -Sum).Sum),2)).ToString('N2',$BR)),$fn.attr)
