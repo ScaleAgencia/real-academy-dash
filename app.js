@@ -510,17 +510,19 @@ function cmpChart(rows,accent){
   s+=hitRects(rows.map(function(r){return {date:r.d};}),pl,gw,pt,ph)+'</svg>';
   return '<div class="chart">'+s+'</div>';
 }
+var CMP_META={growth:{dot:'g',sub:'Pop-up + Typeform'},flow:{dot:'f',sub:'Pop-up + Typeform'},build:{dot:'b',sub:'Pop-up'},arremate:{dot:'ar',sub:'Pop-up'},experience:{dot:'ex',sub:'Pop-up'}};
+function cmpMeta(prod,cfg){ return CMP_META[prod]||{dot:(cfg.flow?'f':'g'),sub:'Pop-up + Typeform'}; }
 function renderCompareProd(prod,cfg,rows){
-  var t=cmpTotals(rows), accent=cfg.accent;
+  var t=cmpTotals(rows), accent=cfg.accent, m=cmpMeta(prod,cfg);
   var cplGer=dv(t.invest,t.ger), cplClint=dv(t.invest,t.clint);
-  var cls=cfg.flow?'f':'g', chid='cmpchart-'+prod;
+  var cls=m.dot, chid='cmpchart-'+prod;
   var stats='<div class="cmp-stats">'
     +'<div class="cstat"><div class="cl">Investido (período)</div><div class="cv">'+money0(t.invest)+'</div><div class="cs">das queries · c/ imposto</div></div>'
     +'<div class="cstat"><div class="cl">Leads Gerenciador</div><div class="cv" style="color:'+COL.green2+'">'+intf(t.ger)+'</div><div class="cs">planilha · <b>CPL ger. '+(t.ger?money(cplGer):'—')+'</b></div></div>'
     +'<div class="cstat"><div class="cl">Leads Clint</div><div class="cv" style="color:'+COL.gold2+'">'+intf(t.clint)+'</div><div class="cs">comercial · <b>CPL clint '+(t.clint?money(cplClint):'—')+'</b> · Δ '+(t.clint-t.ger>=0?'+':'')+intf(t.clint-t.ger)+'</div></div>'
     +'</div>';
   var leg='<div class="leadsrc-leg"><span><span class="dot" style="background:'+COL.green2+'"></span>Leads gerenciador (planilha)</span><span><span class="dot" style="background:'+COL.gold2+'"></span>Leads na Clint (comercial)</span><span style="color:var(--muted2)">barra = investimento (queries)</span></div>';
-  return '<div class="cmp-prod '+cls+'"><h3><span class="tdot '+(cfg.flow?'f':'g')+'"></span>'+esc(cfg.product)+' <span style="font-size:12px;color:var(--muted);font-weight:500">· Pop-up + Typeform</span></h3>'+stats+leg+'<div id="'+chid+'">'+cmpChart(rows,accent)+'</div></div>';
+  return '<div class="cmp-prod '+cls+'"><h3><span class="tdot '+m.dot+'"></span>'+esc(cfg.product)+' <span style="font-size:12px;color:var(--muted);font-weight:500">· '+m.sub+'</span></h3>'+stats+leg+'<div id="'+chid+'">'+cmpChart(rows,accent)+'</div></div>';
 }
 function renderCompareTable(prod,cfg,rows){
   rows=rows.slice().sort(function(a,b){return b.d.localeCompare(a.d);});
@@ -538,7 +540,7 @@ function renderCompareTable(prod,cfg,rows){
   if(!rows.length) body='<tr><td colspan="7" class="empty">Sem dados no período.</td></tr>';
   var t=cmpTotals(rows);
   var foot='<tfoot><tr><td>Total</td><td class="num">'+money0(t.invest)+'</td><td class="num src-plan">'+intf(t.ger)+'</td><td class="num src-plan">'+(t.ger?money(dv(t.invest,t.ger)):'—')+'</td><td class="num src-clint">'+intf(t.clint)+'</td><td class="num src-clint">'+(t.clint?money(dv(t.invest,t.clint)):'—')+'</td><td class="num">'+(t.clint-t.ger>0?'+':'')+intf(t.clint-t.ger)+'</td></tr></tfoot>';
-  return '<div class="card"><div class="card-h"><span class="tdot '+(cfg.flow?'f':'g')+'"></span>'+esc(cfg.product)+' — dia a dia <span class="hint">CPL ger. = invest ÷ leads da planilha · CPL clint = invest ÷ leads na Clint · mais recente no topo</span></div><div class="table-scroll"><table class="tbl">'+head+'<tbody>'+body+'</tbody>'+foot+'</table></div></div>';
+  return '<div class="card"><div class="card-h"><span class="tdot '+cmpMeta(prod,cfg).dot+'"></span>'+esc(cfg.product)+' — dia a dia <span class="hint">CPL ger. = invest ÷ leads da planilha · CPL clint = invest ÷ leads na Clint · mais recente no topo</span></div><div class="table-scroll"><table class="tbl">'+head+'<tbody>'+body+'</tbody>'+foot+'</table></div></div>';
 }
 function splitBar(title,vg,vf){ var tot=vg+vf; if(tot<=0)tot=1; var wg=vg/tot*100, wf=vf/tot*100;
   return '<div style="font-size:11.5px;color:var(--muted);margin:6px 0 3px">'+title+'</div><div class="tierbar" style="height:26px">'
@@ -549,6 +551,10 @@ function renderCompare(){
   var gRows = isTudo ? cmpRows('growth') : cmpInRange('growth',rng);
   var fRows = isTudo ? cmpRows('flow')   : cmpInRange('flow',rng);
   var tg=cmpTotals(gRows), tf=cmpTotals(fRows);
+  // funis standalone (Build/Arremate/Experience) — mesmo comparativo dos outros, só os que têm dados no período
+  var stand=[['build',CFG['build']],['arremate',CFG['arremate']],['experience',CFG['experience']]].map(function(x){
+    return { prod:x[0], cfg:x[1], rows:(isTudo?cmpRows(x[0]):cmpInRange(x[0],rng)) };
+  }).filter(function(x){ return x.rows.length; });
   var host=el('host');
   var perLbl;
   if(isTudo){ perLbl='todo o período com dados'; }
@@ -561,11 +567,14 @@ function renderCompare(){
   +splitBar('Leads gerenciador (planilha)',tg.ger,tf.ger)
   +splitBar('Leads na Clint (comercial)',tg.clint,tf.clint)
   +'<div class="mini-legend">Investimento vem sempre das <b>queries</b>. <b>CPL ger.</b> = invest ÷ leads da planilha (nossa captação) · <b>CPL clint</b> = invest ÷ leads que o comercial relatou na Clint. Δ Clint−Ger. &gt; 0 = comercial registrou mais leads do que caíram na planilha (outras origens). Δ &lt; 0 = caíram mais na planilha do que entraram na Clint (possível lead não trabalhado).</div></div>'
+  +(stand.length?'<div class="cmp-head">'+stand.map(function(x){return renderCompareProd(x.prod,x.cfg,x.rows);}).join('')+'</div>':'')
   +renderCompareTable('growth',CFG['growth-type'],gRows)
-  +renderCompareTable('flow',CFG['flow-type'],fRows);
+  +renderCompareTable('flow',CFG['flow-type'],fRows)
+  +stand.map(function(x){return renderCompareTable(x.prod,x.cfg,x.rows);}).join('');
   function cmpTip(x){ var r=x.r; return '<div class="tt-d">'+fmtBR(r.d)+'</div><div class="tt-r"><span class="src-plan">Gerenciador</span><b>'+intf(r.planilha)+'</b></div><div class="tt-r"><span class="src-clint">Clint</span><b>'+intf(r.clintLeads)+'</b></div><div class="tt-sub">Invest '+money0(r.qInvest)+' · CPL ger. '+(r.planilha>0?money(dv(r.qInvest,r.planilha)):'—')+' · CPL clint '+(r.clintLeads>0?money(dv(r.qInvest,r.clintLeads)):'—')+'</div>'; }
   bindHits('cmpchart-growth',gRows.map(function(r){return {date:r.d,r:r};}),cmpTip);
   bindHits('cmpchart-flow',fRows.map(function(r){return {date:r.d,r:r};}),cmpTip);
+  stand.forEach(function(x){ bindHits('cmpchart-'+x.prod,x.rows.map(function(r){return {date:r.d,r:r};}),cmpTip); });
 }
 
 /* =================================================================
