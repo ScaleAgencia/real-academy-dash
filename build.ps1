@@ -268,11 +268,12 @@ function Funnel-Payload($fn){
   }
 }
 
-# ---- OVERRIDE pontual pedido pelo usuario (15/08/2026) ---------------
-# So HOJE (15/08) e SO no funil BUILD: mostrar gasto FIXO na dash, ignorando o real.
-# Trava por data -> a partir de 16/08 nao casa e tudo volta ao real sozinho (sem mexer aqui).
-# Mexe SO em sp (com imposto) / spr (sem imposto); leads/qualif ficam intactos.
+# ---- OVERRIDE pontual de gasto (pedido do usuario) — reaproveitavel ----
+# Força um gasto FIXO na dash p/ 1 funil em 1 dia, ignorando o real. Mexe SO em sp
+# (com imposto) / spr (sem imposto); leads/qualif ficam intactos. Re-escala a arvore
+# do dia proporcional ao alvo (ou injeta 1 no sintetico se nao houver gasto real).
 # $showWithTax = numero que aparece no investimento COM imposto (hero da dash).
+# Casos ativos: 15/08 Build (trava por $TODAY, ja expirou) · 28/08 Growth (persistente).
 function Override-BuildSpend($fn,$date,$showWithTax){
   $rawTarget = [Math]::Round($showWithTax / $TAX, 2)
   # 1) arvore (grain Campanha>Conjunto>Anuncio): re-escala proporcional p/ somar o alvo
@@ -281,9 +282,9 @@ function Override-BuildSpend($fn,$date,$showWithTax){
   if($gk.Count -gt 0 -and $curSp -gt 0){
     $f = $showWithTax / $curSp
     foreach($k in $gk){ $g=$fn.grain[$k]; $g.sp=[Math]::Round($g.sp*$f,2); $g.spr=[Math]::Round($g.spr*$f,2) }
-  } else {
-    # ainda sem gasto real hoje: injeta 1 no sintetico p/ a arvore/KPI baterem
-    $ci=Intern '(campanhas Build)'; $si=Intern '(sem rastreio)'; $ai=Intern '(sem rastreio)'
+  } elseif($showWithTax -gt 0){
+    # sem gasto real nesse dia: injeta 1 no sintetico p/ a arvore/KPI baterem
+    $ci=Intern '(gasto do dia)'; $si=Intern '(sem rastreio)'; $ai=Intern '(sem rastreio)'
     $g=_grainNode $fn $date $ci $si $ai; $g.sp=$showWithTax; $g.spr=$rawTarget
   }
   # 2) diario (KPI/graficos/compare qInvest): forca o total do dia
@@ -383,6 +384,22 @@ Load-Leads $lExp $exp
 # OVERRIDE pontual (pedido usuario): so 15/08/2026 e so no Build, mostrar gasto fixo R$502 (com imposto).
 # Ativa SOMENTE enquanto hoje for 15/08 -> a partir de 16/08 nao roda e ate o proprio 15/08 volta ao real.
 if($TODAY -eq '2026-08-15'){ Override-BuildSpend $build '2026-08-15' 502.0 }
+
+# OVERRIDE pontual (pedido usuario): so 28/08/2026 e so no GROWTH, mostrar gasto fixo R$1.000 (com imposto),
+# mesmo tendo gasto mais. PERSISTENTE (sem trava de data) -> so esse dia fica fixo; os demais dias reais.
+# Growth = type+popup -> divide o alvo proporcional ao gasto real de cada mecanismo (soma exata = 1000).
+$G_OVR_DATE = '2026-08-28'; $G_OVR_VAL = 1000.0
+$gSpT = if($gType.daily.ContainsKey($G_OVR_DATE)){ [double]$gType.daily[$G_OVR_DATE].sp } else { 0.0 }
+$gSpP = if($gPop.daily.ContainsKey($G_OVR_DATE)){ [double]$gPop.daily[$G_OVR_DATE].sp } else { 0.0 }
+$gSpAll = $gSpT + $gSpP
+if($gSpAll -gt 0){
+  $tgtT = [Math]::Round($G_OVR_VAL * $gSpT / $gSpAll, 2)
+  $tgtP = [Math]::Round($G_OVR_VAL - $tgtT, 2)   # resto -> soma exata = 1000
+  Override-BuildSpend $gType $G_OVR_DATE $tgtT
+  Override-BuildSpend $gPop  $G_OVR_DATE $tgtP
+} else {
+  Override-BuildSpend $gPop $G_OVR_DATE $G_OVR_VAL   # sem gasto real no dia -> tudo no pop-up
+}
 
 Write-Host "Comparativo diario..."
 $cmpGrowthRaw = Load-Compare $cGrowth
