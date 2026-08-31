@@ -54,11 +54,14 @@ $G_C_ARR      = '1284944705'   # comercial "RA ARREMATE DIARIO"
 $G_C_EXP      = '1665362188'   # comercial "RA EXPERIENCE"
 
 # ---- helpers --------------------------------------------------------
-function Get-Sheet($id,$gid,$out){
-  # &headers=1 = FORCA 1 linha de cabecalho. Sem isso, a auto-deteccao do gviz as vezes
-  # trata centenas de linhas como header e cola tudo no rotulo -> sheet "some" (bug real
-  # que zerou o growth-popup em ago/2026). headers=1 e correto p/ todas as abas (1 header).
-  $url = "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid&headers=1"
+function Get-Sheet($id,$gid,$out,$export){
+  # $export=$true -> endpoint /export?format=csv (le a celula como TEXTO cru, sem inferir tipo).
+  #   USAR NAS ABAS DE LEADS: o gviz infere o tipo da coluna de data pelas datas antigas e
+  #   DESCARTA as datas em formato diferente (ISO "2026-08-24T..:.-03:00" viravam vazio ->
+  #   669 leads "sem data" no Experience -> estimativa falsa espalhava ~8/dia). Bug real, ago/2026.
+  # $export=$false (gviz) -> mantido p/ queries/comercial (colunas de tipo uniforme, ok).
+  #   &headers=1 = FORCA 1 linha de cabecalho (sem isso o gviz colapsa colunas -> sheet "some").
+  $url = if($export){ "https://docs.google.com/spreadsheets/d/$id/export?format=csv&gid=$gid" } else { "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&gid=$gid&headers=1" }
   if($env:RA_REUSE -eq '1' -and (Test-Path $out)){ return $out }
   for($try=1;$try -le 4;$try++){
     try{ $wc=New-Object System.Net.WebClient; $wc.Encoding=[Text.Encoding]::UTF8
@@ -344,20 +347,21 @@ function Merge-Compare($comm,$planByDay,$fnType,$fnPop){
 Write-Host "Baixando planilhas..."
 $qGrowth = Get-Sheet $QUERIES_ID $G_Q_GROWTH   (Join-Path $dataDir 'q_growth.csv')
 $qFlow   = Get-Sheet $QUERIES_ID $G_Q_FLOW     (Join-Path $dataDir 'q_flow.csv')
-$lGT = Get-Sheet $LEADS_ID $G_L_GROWTH_T (Join-Path $dataDir 'l_growth_type.csv')
-$lGP = Get-Sheet $LEADS_ID $G_L_GROWTH_P (Join-Path $dataDir 'l_growth_popup.csv')
-$lFT = Get-Sheet $LEADS_ID $G_L_FLOW_T   (Join-Path $dataDir 'l_flow_type.csv')
-$lFP = Get-Sheet $LEADS_ID $G_L_FLOW_P   (Join-Path $dataDir 'l_flow_popup.csv')
+# LEADS via /export (le datas ISO como texto; gviz descartava-as) -> $true no ultimo arg
+$lGT = Get-Sheet $LEADS_ID $G_L_GROWTH_T (Join-Path $dataDir 'l_growth_type.csv') $true
+$lGP = Get-Sheet $LEADS_ID $G_L_GROWTH_P (Join-Path $dataDir 'l_growth_popup.csv') $true
+$lFT = Get-Sheet $LEADS_ID $G_L_FLOW_T   (Join-Path $dataDir 'l_flow_type.csv') $true
+$lFP = Get-Sheet $LEADS_ID $G_L_FLOW_P   (Join-Path $dataDir 'l_flow_popup.csv') $true
 $cFlow   = Get-Sheet $COMM_ID $G_C_FLOW   (Join-Path $dataDir 'c_flow.csv')
 $cGrowth = Get-Sheet $COMM_ID $G_C_GROWTH (Join-Path $dataDir 'c_growth.csv')
 $cBuild  = Get-Sheet $COMM_ID $G_C_BUILD  (Join-Path $dataDir 'c_build.csv')
 $qBuild  = Get-Sheet $QUERIES_ID $G_Q_BUILD  (Join-Path $dataDir 'q_build.csv')
-$lBuild  = Get-Sheet $LEADS_ID   $G_L_BUILD_P (Join-Path $dataDir 'l_build.csv')
+$lBuild  = Get-Sheet $LEADS_ID   $G_L_BUILD_P (Join-Path $dataDir 'l_build.csv') $true
 $qArr    = Get-Sheet $QUERIES_ID $G_Q_ARR   (Join-Path $dataDir 'q_arr.csv')
-$lArr    = Get-Sheet $LEADS_ID   $G_L_ARR_P (Join-Path $dataDir 'l_arr.csv')
+$lArr    = Get-Sheet $LEADS_ID   $G_L_ARR_P (Join-Path $dataDir 'l_arr.csv') $true
 $cArr    = Get-Sheet $COMM_ID    $G_C_ARR   (Join-Path $dataDir 'c_arr.csv')
 $qExp    = Get-Sheet $QUERIES_ID $G_Q_EXP   (Join-Path $dataDir 'q_exp.csv')
-$lExp    = Get-Sheet $LEADS_ID   $G_L_EXP_P (Join-Path $dataDir 'l_exp.csv')
+$lExp    = Get-Sheet $LEADS_ID   $G_L_EXP_P (Join-Path $dataDir 'l_exp.csv') $true
 $cExp    = Get-Sheet $COMM_ID    $G_C_EXP   (Join-Path $dataDir 'c_exp.csv')
 
 $gType = New-Funnel 'growth-type'  'Growth Typeform' 'growth' 'type'
