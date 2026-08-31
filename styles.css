@@ -62,6 +62,11 @@ b{font-weight:700}
 .tdot.b{background:#a78bfa;box-shadow:0 0 7px rgba(167,139,250,.6)}
 .tdot.ar{background:#f0993a;box-shadow:0 0 7px rgba(240,153,58,.6)}
 .tdot.ex{background:#e56db0;box-shadow:0 0 7px rgba(229,109,176,.6)}
+.trackrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 12px}
+.trk-btn{cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--gold2);background:rgba(217,180,90,.08);border:1px solid rgba(217,180,90,.35);border-radius:999px;padding:6px 13px;transition:.15s;white-space:nowrap}
+.trk-btn:hover{background:rgba(217,180,90,.16)}
+.trk-btn.on{background:var(--gold);color:#20160a;border-color:var(--gold)}
+.trk-note{font-size:12px;color:var(--muted)}
 
 /* ---------- cards ---------- */
 .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;margin-bottom:16px;box-shadow:var(--shadow)}

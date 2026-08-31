@@ -133,7 +133,8 @@ function _grainNode($fn,$d,$ci,$si,$ai){
   return $fn.grain[$k]
 }
 function _dailyNode($fn,$d){
-  if(-not $fn.daily.ContainsKey($d)){ $fn.daily[$d]=[pscustomobject]@{ date=$d; sp=0.0;spr=0.0;im=0;ck=0;lp=0;ld=0; A=0;B=0;N=0 } }
+  # ldT/AT/BT/NT = versao SO RASTREADOS (leads atribuidos a uma campanha) p/ o toggle "so rastreados"
+  if(-not $fn.daily.ContainsKey($d)){ $fn.daily[$d]=[pscustomobject]@{ date=$d; sp=0.0;spr=0.0;im=0;ck=0;lp=0;ld=0; A=0;B=0;N=0; ldT=0;AT=0;BT=0;NT=0 } }
   return $fn.daily[$d]
 }
 
@@ -222,6 +223,7 @@ function Load-Leads($csvPath,$fn,$startName){
     $tier=TierOf $capRaw $expRaw
     $dispRaw= if($Ldisp -ge 0 -and $Ldisp -lt $r.Count){ Norm $r[$Ldisp] } else { '' }
     $cName=MatchName ($r[$Lcamp]) $fn.campDe
+    $isTrk = ($cName -ne '')   # rastreado = atribuido a uma campanha (bate com $fn.attr)
     if($cName -eq ''){ $ci=$sent; $si=$sent; $ai=$sent }
     else {
       $sName= if($Lmed -ge 0){ MatchName ($r[$Lmed]) $fn.setDe } else { '' }
@@ -232,7 +234,8 @@ function Load-Leads($csvPath,$fn,$startName){
     }
     $g=_grainNode $fn $d $ci $si $ai; $g.ld++; if(IsQualified $tier){ $g.ql++ }
     $fn.leads++; $fn.tiers[$tier]++; if($it.est){ $fn.leadsEst++ }
-    if($d -ne ''){ $fn.leadsDated++; $o=_dailyNode $fn $d; $o.ld++; $o.$tier++ }
+    if($d -ne ''){ $fn.leadsDated++; $o=_dailyNode $fn $d; $o.ld++; $o.$tier++
+      if($isTrk){ $o.ldT++; if($tier -eq 'A'){$o.AT++}elseif($tier -eq 'B'){$o.BT++}else{$o.NT++} } }
     $ck2= if($capRaw -eq ''){'(sem resposta)'}else{$capRaw}; if(-not $fn.capDist.ContainsKey($ck2)){ $fn.capDist[$ck2]=0 }; $fn.capDist[$ck2]++
     if($expRaw -ne ''){ if(-not $fn.expDist.ContainsKey($expRaw)){ $fn.expDist[$expRaw]=0 }; $fn.expDist[$expRaw]++ }
     if($dispRaw -ne ''){ if(-not $fn.dispDist.ContainsKey($dispRaw)){ $fn.dispDist[$dispRaw]=0 }; $fn.dispDist[$dispRaw]++ }
@@ -252,7 +255,7 @@ function Funnel-Payload($fn){
   $qd=@($dd | Where-Object { $_.sp -gt 0 -or $_.im -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
   $ld=@($dd | Where-Object { $_.ld -gt 0 } | ForEach-Object { $_.date } | Sort-Object)
   $dOut=New-Object System.Collections.ArrayList
-  foreach($o in $dd){ [void]$dOut.Add([pscustomobject]@{ date=$o.date; sp=[Math]::Round($o.sp,2); spr=[Math]::Round($o.spr,2); im=[int]$o.im; ck=[int]$o.ck; lp=[int]$o.lp; ld=[int]$o.ld; A=[int]$o.A; B=[int]$o.B; N=[int]$o.N }) }
+  foreach($o in $dd){ [void]$dOut.Add([pscustomobject]@{ date=$o.date; sp=[Math]::Round($o.sp,2); spr=[Math]::Round($o.spr,2); im=[int]$o.im; ck=[int]$o.ck; lp=[int]$o.lp; ld=[int]$o.ld; A=[int]$o.A; B=[int]$o.B; N=[int]$o.N; ldT=[int]$o.ldT; AT=[int]$o.AT; BT=[int]$o.BT; NT=[int]$o.NT }) }
   $qlAll= $fn.tiers.A + $fn.tiers.B   # qualificado = A+B (investidor ativo)
   return [pscustomobject]@{
     key=$fn.key; label=$fn.label; product=$fn.product; kind=$fn.kind

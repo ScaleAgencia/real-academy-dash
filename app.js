@@ -50,8 +50,8 @@ var CFG = {
 function mergeDistArr(a,b){ var m={}; arr(a).concat(arr(b)).forEach(function(x){ if(!x)return; m[x.label]=(m[x.label]||0)+(x.count||0); });
   return Object.keys(m).map(function(k){return {label:k,count:m[k]};}).sort(function(x,y){return y.count-x.count;}); }
 function combineFunnels(key,fa,fb){
-  var dm={}; [fa,fb].forEach(function(f){ f.daily.forEach(function(o){ var x=dm[o.date]||(dm[o.date]={date:o.date,sp:0,spr:0,im:0,ck:0,lp:0,ld:0,A:0,B:0,N:0});
-    x.sp+=o.sp||0;x.spr+=o.spr||0;x.im+=o.im||0;x.ck+=o.ck||0;x.lp+=o.lp||0;x.ld+=o.ld||0; ['A','B','N'].forEach(function(k){x[k]+=o[k]||0;}); }); });
+  var dm={}; [fa,fb].forEach(function(f){ f.daily.forEach(function(o){ var x=dm[o.date]||(dm[o.date]={date:o.date,sp:0,spr:0,im:0,ck:0,lp:0,ld:0,A:0,B:0,N:0,ldT:0,AT:0,BT:0,NT:0});
+    x.sp+=o.sp||0;x.spr+=o.spr||0;x.im+=o.im||0;x.ck+=o.ck||0;x.lp+=o.lp||0;x.ld+=o.ld||0; ['A','B','N','ldT','AT','BT','NT'].forEach(function(k){x[k]+=o[k]||0;}); }); });
   var daily=Object.keys(dm).map(function(k){return dm[k];}).sort(function(a,b){return a.date.localeCompare(b.date);});
   var ta=fa.totals||{}, tb=fb.totals||{}; function sm(k){ return (+ta[k]||0)+(+tb[k]||0); }
   var tiers={}; ['A','B','N'].forEach(function(k){ tiers[k]=((ta.tiers||{})[k]||0)+((tb.tiers||{})[k]||0); });
@@ -93,6 +93,7 @@ function daysBetween(a,b){ var pa=a.split('-'),pb=b.split('-'); return Math.roun
 function inRange(dt,r){ return isDate(dt) && dt>=r[0] && dt<=r[1]; }
 var PRESETS=[{k:'hoje',label:'Hoje'},{k:'ontem',label:'Ontem'},{k:'mes',label:'Este mês'},{k:'7d',label:'7 dias'},{k:'14d',label:'14 dias'},{k:'30d',label:'30 dias'},{k:'tudo',label:'Tudo'}];
 var period='tudo', customRange=null;
+var onlyTracked=false;   // toggle "so rastreados": usa leads atribuidos a campanha (ldT/AT/BT/NT)
 function rangeFor(k){
   if(k==='custom'&&customRange) return customRange;
   if(k==='hoje') return [maxDate,maxDate];
@@ -108,14 +109,18 @@ function prevRange(rng){ var len=daysBetween(rng[0],rng[1])+1; var pe=addDays(rn
 /* ---------- agregação de um funil ---------- */
 function emptyAgg(){ return {spend:0,spendRaw:0,impr:0,clicks:0,lpv:0,leads:0,leadsDated:0,qualified:0,tiers:{A:0,B:0,N:0}}; }
 function aggFunnel(fn,rng,isTudo){
-  if(isTudo){ var t=fn.totals; return {spend:+t.spend||0,spendRaw:+t.spendRaw||0,impr:+t.impr||0,clicks:+t.clicks||0,lpv:+t.lpv||0,
+  if(isTudo && !onlyTracked){ var t=fn.totals; return {spend:+t.spend||0,spendRaw:+t.spendRaw||0,impr:+t.impr||0,clicks:+t.clicks||0,lpv:+t.lpv||0,
     leads:+t.leads||0,leadsDated:+t.leadsDated||0,qualified:+t.qualified||0,tiers:t.tiers||{}}; }
+  var lf=onlyTracked?'ldT':'ld', tf=onlyTracked?['AT','BT','NT']:['A','B','N'];
   var o=emptyAgg();
-  fn.daily.forEach(function(d){ if(!inRange(d.date,rng))return; o.spend+=d.sp||0;o.spendRaw+=d.spr||0;o.impr+=d.im||0;o.clicks+=d.ck||0;o.lpv+=d.lp||0;o.leads+=d.ld||0;
-    ['A','B','N'].forEach(function(k){o.tiers[k]+=d[k]||0;}); });
+  fn.daily.forEach(function(d){ if(!(isTudo||inRange(d.date,rng)))return; o.spend+=d.sp||0;o.spendRaw+=d.spr||0;o.impr+=d.im||0;o.clicks+=d.ck||0;o.lpv+=d.lp||0;o.leads+=d[lf]||0;
+    ['A','B','N'].forEach(function(k,i){o.tiers[k]+=d[tf[i]]||0;}); });
   o.qualified=(o.tiers.A||0)+(o.tiers.B||0); o.leadsDated=o.leads; return o;
 }
-function daysInRange(fn,rng){ return fn.daily.filter(function(d){return inRange(d.date,rng);}).sort(function(a,b){return a.date.localeCompare(b.date);}); }
+// no modo "so rastreados" mapeia ldT/AT/BT/NT -> ld/A/B/N para graficos e tabela reaproveitarem
+function daysInRange(fn,rng){ var rows=fn.daily.filter(function(d){return inRange(d.date,rng);}).sort(function(a,b){return a.date.localeCompare(b.date);});
+  if(onlyTracked) rows=rows.map(function(d){ return {date:d.date,sp:d.sp,spr:d.spr,im:d.im,ck:d.ck,lp:d.lp,ld:d.ldT||0,A:d.AT||0,B:d.BT||0,N:d.NT||0}; });
+  return rows; }
 function median(xs){ var a=xs.filter(function(x){return x!=null&&isFinite(x)&&x>0;}).sort(function(x,y){return x-y;}); if(!a.length)return 0; var m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; }
 function trendHTML(cur,prev,higherBetter){ if(prev==null||!isFinite(prev)||prev===0||!isFinite(cur))return ''; var ch=(cur-prev)/Math.abs(prev)*100; if(Math.abs(ch)<0.1)return '';
   var up=ch>0, good=higherBetter?up:!up; return '<span class="trend '+(good?'up':'down')+'">'+(up?'▲':'▼')+nf1.format(Math.abs(ch))+'%</span>'; }
@@ -133,9 +138,12 @@ function funnelShell(cfg,fn){
   else { note='Investimento = campanhas <b>sem "typeform"</b> a partir de 30/06 (lançamento do Pop-up).'; }
   var est = fn.totals.leadsEst||0;
   var undNote = est>0.15*(fn.totals.leads||1) ? ' · <b>'+intf(est)+'</b> leads com <b>data estimada</b> pela ordem de chegada (Submitted At vazio na planilha)' : '';
+  var unt=(fn.totals.leads||0)-(fn.totals.attr||0);
+  var showTrk = unt > 0.10*(fn.totals.leads||1);   // toggle so aparece onde ha muito lead sem UTM
   return ''
   +'<div class="editband"><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.product)+'</span><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.kind)+'</span> captação Meta Ads &nbsp;·&nbsp; '+note+undNote+'</div>'
   +'<div id="fwarn"></div>'
+  +(showTrk?'<div class="trackrow"><button id="btnTrack" class="trk-btn" type="button"></button><span id="trkNote" class="trk-note"></span></div>':'')
   +'<div class="kgrid" id="fkpi"></div>'
   +'<div class="funnel-grid">'
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Funil de captação <span class="hint">Meta Ads · imposto incluso · seta = vs. período anterior</span></div><div id="ffunnel"></div></div>'
@@ -363,6 +371,7 @@ function renderTree(cfg,fn,rng,isTudo){
     var r=va-vb; if(r===0)r=(b.spend||0)-(a.spend||0); return ss.rev?-r:r; }
   function skeys(obj){ return Object.keys(obj).sort(function(x,y){return cmp(obj[x],obj[y]);}); }
   var order=skeys(camps);
+  if(onlyTracked) order=order.filter(function(k){ return k!=='(sem rastreio)'; });
   if(!treeInit[fk]){ order.slice(0,3).forEach(function(cK){ expanded[fk]['c:'+cK]=true; }); treeInit[fk]=true; }
   var head='<thead><tr>'+TREE_COLS.map(function(c){ var on=ss.key===c.k; return '<th class="sortable'+(on?' sorton':'')+'" data-col="'+c.k+'">'+c.l+(on?' <span class="sarr">'+(ss.rev?'▲':'▼')+'</span>':'')+'</th>'; }).join('')+'</tr></thead>';
   var out=[];
@@ -463,10 +472,24 @@ function renderFunnel(fk){
   var fn=FN[fk], cfg=CFG[fk];
   el('host').innerHTML=funnelShell(cfg,fn);
   renderFunnelData(fk);
+  var bt=el('btnTrack'); if(bt) bt.addEventListener('click',function(){ onlyTracked=!onlyTracked; renderFunnelData(fk); });
 }
+function syncTrackUI(fn,rng,isTudo){
+  var bt=el('btnTrack'); if(!bt) return;
+  bt.className='trk-btn'+(onlyTracked?' on':'');
+  bt.innerHTML=onlyTracked?'✓ Só leads rastreados':'Só leads rastreados';
+  var nt=el('trkNote'); if(nt){
+    if(onlyTracked){ var at=aggFunnel(fn,rng,isTudo); var all=aggFunnel2All(fn,rng,isTudo);
+      nt.innerHTML='mostrando <b>'+intf(at.leads)+'</b> de '+intf(all)+' leads do período — só os atribuídos a uma campanha (com UTM). Os sem rastreio estão ocultos.'; }
+    else nt.innerHTML='clique p/ ver só os leads com campanha rastreada (UTM) — esconde os "sem rastreio".';
+  }
+}
+// contagem total de leads (todos) do periodo, p/ a nota do toggle
+function aggFunnel2All(fn,rng,isTudo){ var n=0; fn.daily.forEach(function(d){ if(isTudo||inRange(d.date,rng)) n+=d.ld||0; }); return n; }
 function renderFunnelData(fk){
   var fn=FN[fk], cfg=CFG[fk], isTudo=(period==='tudo'), rng=rangeFor(period), prng=prevRange(rng);
   var a=aggFunnel(fn,rng,isTudo), p=aggFunnel(fn,prng,false), days=daysInRange(fn,rng);
+  syncTrackUI(fn,rng,isTudo);
   var warn=el('fwarn');
   if(warn){ var notes=[];
     var est=fn.totals.leadsEst||0;
@@ -583,7 +606,7 @@ function renderCompare(){
 var TABS=['total','growth-all','growth-popup','growth-type','flow-all','flow-popup','flow-type','build','arremate','experience','compare'];
 var active='total';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
-function activateTab(id){ active=id;
+function activateTab(id){ active=id; onlyTracked=false;   // reseta o modo "so rastreados" a cada troca de aba
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){ x.classList.toggle('active',x.getAttribute('data-tab')===id); });
   el('periods').style.visibility='visible';
   renderActive();
