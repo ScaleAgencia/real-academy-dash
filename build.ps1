@@ -52,6 +52,7 @@ $G_L_ARR_P    = '972106590'    # leads aba "Arremate - Popup"
 $G_L_EXP_P    = '1277316158'   # leads aba "Experience - Popup"
 $G_C_ARR      = '1284944705'   # comercial "RA ARREMATE DIARIO"
 $G_C_EXP      = '1665362188'   # comercial "RA EXPERIENCE"
+$G_C_CLUB     = '283417784'    # comercial "Vendas - Real Club" (produto de ascensao vendido nos eventos)
 
 # ---- helpers --------------------------------------------------------
 function Get-Sheet($id,$gid,$out,$export){
@@ -274,6 +275,32 @@ function Funnel-Payload($fn){
   }
 }
 
+# ---- ASCENSAO / Real Club (produto vendido dentro dos eventos) -------
+# Lista de vendas: coluna Evento diz de qual evento (funil) veio, Valor = faturamento, Data = data da venda.
+# Atribui ao funil pela 1a palavra do Evento. Ignora linhas sem valor OU sem evento valido (resumos).
+function ClubFunnel($ev){ $e=Deacc $ev
+  if($e -like 'growth*'){return 'growth'}; if($e -like 'flow*'){return 'flow'}; if($e -like 'build*'){return 'build'}
+  if($e -like 'arremat*'){return 'arremate'}; if($e -like 'exp*'){return 'experience'}; return '' }
+function Load-Club($csvPath){
+  $rows=Read-Csv $csvPath; $h=$rows[0]
+  $cD=HdrLike $h 'data'; $cV=HdrLike $h 'valor'; $cE=HdrLike $h 'evento'
+  if($cV -lt 0 -or $cE -lt 0){ return @() }
+  $agg=@{}
+  for($i=1;$i -lt $rows.Count;$i++){ $r=$rows[$i]
+    $val= if($cV -lt $r.Count){ MoneyBR $r[$cV] } else { 0.0 }
+    if($val -le 0){ continue }
+    $ev= if($cE -lt $r.Count){ Norm $r[$cE] } else { '' }
+    $f=ClubFunnel $ev; if($f -eq ''){ continue }   # sem evento valido = linha de resumo -> ignora
+    $d= if($cD -ge 0 -and $cD -lt $r.Count){ LDate $r[$cD] } else { '' }
+    $k="$f|$ev|$d"
+    if(-not $agg.ContainsKey($k)){ $agg[$k]=[pscustomobject]@{ f=$f; ev=$ev; d=$d; fat=0.0; n=0 } }
+    $agg[$k].fat+=$val; $agg[$k].n++
+  }
+  $out=New-Object System.Collections.ArrayList
+  foreach($v in ($agg.Values | Sort-Object f,ev,d)){ [void]$out.Add([pscustomobject]@{ f=$v.f; ev=$v.ev; d=$v.d; fat=[Math]::Round($v.fat,2); n=$v.n }) }
+  return @($out)
+}
+
 # ---- OVERRIDE pontual de gasto (pedido do usuario) — reaproveitavel ----
 # Força um gasto FIXO na dash p/ 1 funil em 1 dia, ignorando o real. Mexe SO em sp
 # (com imposto) / spr (sem imposto); leads/qualif ficam intactos. Re-escala a arvore
@@ -363,6 +390,7 @@ $cArr    = Get-Sheet $COMM_ID    $G_C_ARR   (Join-Path $dataDir 'c_arr.csv')
 $qExp    = Get-Sheet $QUERIES_ID $G_Q_EXP   (Join-Path $dataDir 'q_exp.csv')
 $lExp    = Get-Sheet $LEADS_ID   $G_L_EXP_P (Join-Path $dataDir 'l_exp.csv') $true
 $cExp    = Get-Sheet $COMM_ID    $G_C_EXP   (Join-Path $dataDir 'c_exp.csv')
+$cClub   = Get-Sheet $COMM_ID    $G_C_CLUB  (Join-Path $dataDir 'c_club.csv') $true
 
 $gType = New-Funnel 'growth-type'  'Growth Typeform' 'growth' 'type'
 $gPop  = New-Funnel 'growth-popup' 'Growth Pop-up'   'growth' 'popup'
@@ -419,6 +447,8 @@ $cmpArrRaw = Load-Compare $cArr
 $cmpArr    = Merge-Compare $cmpArrRaw  (PlanilhaByDay $arr $null) $arr $null
 $cmpExpRaw = Load-Compare $cExp
 $cmpExp    = Merge-Compare $cmpExpRaw  (PlanilhaByDay $exp $null) $exp $null
+Write-Host "Ascensao (Real Club)..."
+$club = Load-Club $cClub
 
 $nowIso=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $nowBR=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('dd/MM/yyyy HH:mm')
@@ -437,6 +467,7 @@ $payload=[pscustomobject]@{
     'experience'=Funnel-Payload $exp
   }
   compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild); arremate=@($cmpArr); experience=@($cmpExp) }
+  club=@($club)
 }
 $utf8=[Text.UTF8Encoding]::new($false)
 $json=$payload | ConvertTo-Json -Depth 20 -Compress

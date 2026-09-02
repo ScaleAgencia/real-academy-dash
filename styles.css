@@ -179,6 +179,7 @@ b{font-weight:700}
 .roas-r{background:rgba(242,99,126,.16);color:var(--neg)}
 .roas-n{color:var(--muted2)}
 .sales-card{border-color:rgba(217,180,90,.28)}
+.club-card{border-color:rgba(217,180,90,.28);border-top:3px solid var(--gold)}
 .sales-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:12px}
 @media(max-width:900px){.sales-tiles{grid-template-columns:repeat(2,1fr)}}
 .stile{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:11px 12px}
