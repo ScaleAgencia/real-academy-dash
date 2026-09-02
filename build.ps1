@@ -52,7 +52,7 @@ $G_L_ARR_P    = '972106590'    # leads aba "Arremate - Popup"
 $G_L_EXP_P    = '1277316158'   # leads aba "Experience - Popup"
 $G_C_ARR      = '1284944705'   # comercial "RA ARREMATE DIARIO"
 $G_C_EXP      = '1665362188'   # comercial "RA EXPERIENCE"
-$G_C_CLUB     = '721960869'    # comercial "Vendas - Real Club" (ascensao R$22-30k vendida nos eventos). NAO confundir com 283417784 = "Vendas Imersoes" (ingressos).
+$G_C_CLUB     = '283417784'    # comercial "Vendas - Real Club" (produto de ascensao vendido nos eventos)
 
 # ---- helpers --------------------------------------------------------
 function Get-Sheet($id,$gid,$out,$export){
@@ -278,14 +278,12 @@ function Funnel-Payload($fn){
 # ---- ASCENSAO / Real Club (produto vendido dentro dos eventos) -------
 # Lista de vendas: coluna Evento diz de qual evento (funil) veio, Valor = faturamento, Data = data da venda.
 # Atribui ao funil pela 1a palavra do Evento. Ignora linhas sem valor OU sem evento valido (resumos).
-function ClubFunnel($ev){ $e=Deacc $ev   # origem = "Experience" / "Real Growth - Julho" / "Real Flow - Agosto" / "Build" ... -> match por CONTEM
-  if($e -like '*growth*'){return 'growth'}; if($e -like '*flow*'){return 'flow'}; if($e -like '*build*'){return 'build'}
-  if($e -like '*arremat*'){return 'arremate'}; if($e -like '*experi*'){return 'experience'}; return '' }
+function ClubFunnel($ev){ $e=Deacc $ev
+  if($e -like 'growth*'){return 'growth'}; if($e -like 'flow*'){return 'flow'}; if($e -like 'build*'){return 'build'}
+  if($e -like 'arremat*'){return 'arremate'}; if($e -like 'exp*'){return 'experience'}; return '' }
 function Load-Club($csvPath){
   $rows=Read-Csv $csvPath; $h=$rows[0]
-  # aba "Vendas - Real Club": Data | Leads(nome) | Numero | Valor negociado | Valor pago | Origem(col F)
-  $cD=HdrLike $h 'data'; $cV=HdrLike $h '*valor pago*'; $cE=HdrLike $h 'origem'
-  if($cV -lt 0){ $cV=HdrLike $h '*valor*' }
+  $cD=HdrLike $h 'data'; $cV=HdrLike $h 'valor'; $cE=HdrLike $h 'evento'
   if($cV -lt 0 -or $cE -lt 0){ return @() }
   $agg=@{}
   for($i=1;$i -lt $rows.Count;$i++){ $r=$rows[$i]
