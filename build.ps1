@@ -103,7 +103,10 @@ function DeDup($s){ $s=([string]$s).Trim(); $L=$s.Length; if($L -lt 3){ return $
   if($L % 2 -eq 1){ $m=($L-1)/2; if($s[$m] -eq ' ' -and $s.Substring(0,$m) -eq $s.Substring($m+1)){ return $s.Substring(0,$m) } }
   if($L % 2 -eq 0){ $m=$L/2; if($s.Substring(0,$m) -eq $s.Substring($m)){ return $s.Substring(0,$m) } }
   return $s }
-function CleanUtm($s){ $s=Norm $s; if($s -eq '' -or $s.IndexOf('{{') -ge 0){ return '' }; return (DeDup $s) }
+# URL-decode: muitos leads chegam com utm ENCODED ("REAL-ARREMATY+|+E2-CAP+..." / "%7C" etc.)
+# que nao batem com o nome cru da campanha na query. Decodifica '+' -> espaco e %XX (so melhora o match).
+function UrlDe($s){ $s=($s -replace '\+',' '); try{ $s=[uri]::UnescapeDataString($s) }catch{}; return $s }
+function CleanUtm($s){ $s=Norm $s; if($s -eq ''){ return '' }; $s=UrlDe $s; if($s.IndexOf('{{') -ge 0){ return '' }; return (DeDup $s) }
 
 # faixa de capital (pergunta comum aos 2 mecanismos) -> A..E / NS
 # Qualificacao (definida pelo usuario 04/08): A = "Sou investidor ativo" + capital >= R$500k (500k-1M OU acima de 1M);
@@ -126,7 +129,7 @@ function Intern($v){ if($null -eq $v -or $v -eq ''){ $v='(sem rastreio)' }
 function New-Funnel($key,$label,$product,$kind){
   return [pscustomobject]@{ key=$key; label=$label; product=$product; kind=$kind
     grain=@{}; daily=@{}
-    campDe=@{}; setDe=@{}; adDe=@{}; qPair=@{}; qTriple=@{}
+    campDe=@{}; setDe=@{}; adDe=@{}; adCamp=@{}; qPair=@{}; qTriple=@{}
     capDist=@{}; expDist=@{}; dispDist=@{}
     leads=0; leadsDated=0; leadsEst=0; attr=0
     tiers=@{A=0;B=0;N=0} }
@@ -159,10 +162,14 @@ function Load-Queries($csvPath,$product,$fnType,$fnPop){
     # FASE+TAG
     if((Deacc $cn) -like ("*"+$TYPEFORM_TAG+"*")){ $fn=$fnType } elseif($d -lt $POPUP_START){ $fn=$fnType } else { $fn=$fnPop }
     $ci=Intern $cn; $si=Intern $sn; $ai=Intern $an
-    # mapas de atribuicao do proprio funil (deaccent -> nome real) + co-localizacao
-    if($cn -ne ''){ $kk=Deacc $cn; if(-not $fn.campDe.ContainsKey($kk)){ $fn.campDe[$kk]=$cn } }
-    if($sn -ne ''){ $kk=Deacc $sn; if(-not $fn.setDe.ContainsKey($kk)){ $fn.setDe[$kk]=$sn } }
-    if($an -ne ''){ $kk=Deacc $an; if(-not $fn.adDe.ContainsKey($kk)){ $fn.adDe[$kk]=$an } }
+    # mapas de atribuicao do proprio funil. CHAVE normalizada com CleanUtm (mesma dos leads):
+    # assim '+' vira espaco DOS DOIS LADOS -> resolve tanto utm encoded ("A+B") quanto nome com '+' literal ("sul+sudeste").
+    if($cn -ne ''){ $kk=Deacc (CleanUtm $cn); if($kk -ne '' -and -not $fn.campDe.ContainsKey($kk)){ $fn.campDe[$kk]=$cn } }
+    if($sn -ne ''){ $kk=Deacc (CleanUtm $sn); if($kk -ne '' -and -not $fn.setDe.ContainsKey($kk)){ $fn.setDe[$kk]=$sn } }
+    if($an -ne ''){ $kk=Deacc (CleanUtm $an); if($kk -ne '' -and -not $fn.adDe.ContainsKey($kk)){ $fn.adDe[$kk]=$an } }
+    # anuncio -> campanha (p/ recuperar leads cujo utm_campaign veio quebrado/vazio mas tem utm_content valido).
+    # so serve quando o anuncio mapeia p/ 1 unica campanha no funil; senao marca ambiguo e nao usa.
+    if($an -ne '' -and $cn -ne ''){ $ak=Deacc (CleanUtm $an); if($ak -ne ''){ if(-not $fn.adCamp.ContainsKey($ak)){ $fn.adCamp[$ak]=$cn } elseif($fn.adCamp[$ak] -ne $cn){ $fn.adCamp[$ak]='(ambiguo)' } } }
     if($cn -ne '' -and $sn -ne ''){ $fn.qPair["$cn|$sn"]=$true; if($an -ne ''){ $fn.qTriple["$cn|$sn|$an"]=$true } }
     $g=_grainNode $fn $d $ci $si $ai; $g.sp+=$sp; $g.spr+=$spRaw; $g.im+=$im; $g.ck+=$ck; $g.lp+=$lp
     $o=_dailyNode $fn $d; $o.sp+=$sp; $o.spr+=$spRaw; $o.im+=$im; $o.ck+=$ck; $o.lp+=$lp
@@ -227,6 +234,10 @@ function Load-Leads($csvPath,$fn,$startName){
     $tier=TierOf $capRaw $expRaw
     $dispRaw= if($Ldisp -ge 0 -and $Ldisp -lt $r.Count){ Norm $r[$Ldisp] } else { '' }
     $cName=MatchName ($r[$Lcamp]) $fn.campDe
+    if($cName -eq '' -and $Lcont -ge 0 -and $Lcont -lt $r.Count){
+      # utm_campaign veio quebrado ({{...}}) ou vazio -> tenta recuperar a campanha pelo anuncio (utm_content), se unico no funil
+      $ak=Deacc (CleanUtm $r[$Lcont]); if($ak -ne '' -and $fn.adCamp.ContainsKey($ak) -and $fn.adCamp[$ak] -ne '(ambiguo)'){ $cName=$fn.adCamp[$ak] }
+    }
     $isTrk = ($cName -ne '')   # rastreado = atribuido a uma campanha (bate com $fn.attr)
     if($cName -eq ''){ $ci=$sent; $si=$sent; $ai=$sent }
     else {
