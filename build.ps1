@@ -449,6 +449,10 @@ if($gSpAll -gt 0){
   Override-BuildSpend $gPop $G_OVR_DATE $G_OVR_VAL   # sem gasto real no dia -> tudo no pop-up
 }
 
+# OVERRIDE pontual (pedido usuario): ARREMATE 13,14,15/09/2026 = R$400/dia fixo (com imposto), demais dias reais.
+# Fixo nesses 3 dias (persistente); dias >= 16/09 seguem com o gasto real.
+foreach($od in @('2026-09-13','2026-09-14','2026-09-15')){ Override-BuildSpend $arr $od 400.0 }
+
 Write-Host "Comparativo diario..."
 $cmpGrowthRaw = Load-Compare $cGrowth
 $cmpFlowRaw   = Load-Compare $cFlow
