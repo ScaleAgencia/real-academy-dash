@@ -286,6 +286,29 @@ function Funnel-Payload($fn){
   }
 }
 
+# ---- CORTES DE EVENTO (aba diaria do comercial) ----------------------
+# O comercial marca "DATA EVENTO" na linha acima das datas, em cima da data de cada evento.
+# Cada marcador = 1 corte. Ciclo = dia seguinte ao corte anterior ate o corte (o 1o ciclo
+# comeca na 1a data da aba). Lido dinamicamente: marcou um corte novo -> vira botao sozinho.
+function Load-Cuts($csvPath){
+  $rows=Read-Csv $csvPath
+  $labCol=-1; $dateRow=-1
+  for($i=0;$i -lt $rows.Count;$i++){ $r=$rows[$i]
+    for($j=0;$j -lt [Math]::Min($r.Count,6);$j++){ if((Deacc $r[$j]) -eq 'data'){ $labCol=$j; $dateRow=$i; break } }
+    if($dateRow -ge 0){ break } }
+  if($dateRow -lt 0){ return $null }
+  $dr=$rows[$dateRow]
+  $ds=New-Object System.Collections.ArrayList
+  for($j=$labCol+1;$j -lt $dr.Count;$j++){ $d=LDate $dr[$j]; if($d -ne ''){ [void]$ds.Add($d) } }
+  if($ds.Count -eq 0){ return $null }
+  $cuts=@{}
+  for($i=0;$i -lt $rows.Count;$i++){ if($i -eq $dateRow){ continue }; $r=$rows[$i]
+    for($j=$labCol+1;$j -lt [Math]::Min($r.Count,$dr.Count);$j++){
+      if((Deacc $r[$j]) -like '*data*evento*'){ $d=LDate $dr[$j]; if($d -ne ''){ $cuts[$d]=$true } } } }
+  $sorted=@($ds | Sort-Object)
+  return [pscustomobject]@{ first=$sorted[0]; last=$sorted[-1]; cuts=@($cuts.Keys | Sort-Object) }
+}
+
 # ---- ASCENSAO / Real Club (produto vendido dentro dos eventos) -------
 # Lista de vendas: coluna Evento diz de qual evento (funil) veio, Valor = faturamento, Data = data da venda.
 # Atribui ao funil pela 1a palavra do Evento. Ignora linhas sem valor OU sem evento valido (resumos).
@@ -485,6 +508,7 @@ $payload=[pscustomobject]@{
   }
   compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild); arremate=@($cmpArr); experience=@($cmpExp) }
   club=@($club)
+  cuts=[pscustomobject]@{ growth=(Load-Cuts $cGrowth); flow=(Load-Cuts $cFlow); build=(Load-Cuts $cBuild); arremate=(Load-Cuts $cArr); experience=(Load-Cuts $cExp) }
 }
 $utf8=[Text.UTF8Encoding]::new($false)
 $json=$payload | ConvertTo-Json -Depth 20 -Compress

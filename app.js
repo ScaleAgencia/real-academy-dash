@@ -142,6 +142,7 @@ function funnelShell(cfg,fn){
   var showTrk = unt > 0.10*(fn.totals.leads||1);   // toggle so aparece onde ha muito lead sem UTM
   return ''
   +'<div class="editband"><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.product)+'</span><span class="pill '+(cfg.flow?'f':'g')+'">'+esc(cfg.kind)+'</span> captação Meta Ads &nbsp;·&nbsp; '+note+undNote+'</div>'
+  +((!cfg.isTotal && (D.cuts||{})[cfg.salesKey]) ? '<div class="evrow" id="evrow"></div>' : '')
   +'<div id="fwarn"></div>'
   +(showTrk?'<div class="trackrow"><button id="btnTrack" class="trk-btn" type="button"></button><span id="trkNote" class="trk-note"></span></div>':'')
   +'<div class="kgrid" id="fkpi"></div>'
@@ -510,6 +511,42 @@ function renderFunnel(fk){
   el('host').innerHTML=funnelShell(cfg,fn);
   renderFunnelData(fk);
   var bt=el('btnTrack'); if(bt) bt.addEventListener('click',function(){ onlyTracked=!onlyTracked; renderFunnelData(fk); });
+  var er=el('evrow'); if(er) er.addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('.ev-chip'):null; if(!b)return;
+    var w0=b.getAttribute('data-w0'), w1=b.getAttribute('data-w1');
+    if(period==='custom'&&customRange&&customRange[0]===w0&&customRange[1]===w1){ period='tudo'; customRange=null; evPicked=false; }
+    else { customRange=[w0,w1]; period='custom'; evPicked=true; evKey=cfg.salesKey; }
+    syncPeriodUI(); renderFunnelData(fk); });
+}
+/* ---- cortes de evento (comercial: "DATA EVENTO" na aba diária) ----
+   ciclo = dia seguinte ao corte anterior até o corte; 1º ciclo começa na 1ª data da aba;
+   depois do último corte (se já passou) = ciclo aberto até hoje (próximo evento ainda sem corte) */
+var evPicked=false, evKey='';
+function eventCycles(salesKey){
+  var c=(D.cuts||{})[salesKey]; if(!c||!isDate(c.first)) return null;
+  var cuts=arr(c.cuts).filter(isDate).sort(), out=[], prevEnd=addDays(c.first,-1);
+  cuts.forEach(function(cd){ var w0=addDays(prevEnd,1); if(w0<=cd && w0<=maxDate) out.push({w0:w0,w1:cd,cut:cd,cur:(cd>=maxDate)}); prevEnd=cd; });
+  if(cuts.length && prevEnd<maxDate) out.push({w0:addDays(prevEnd,1),w1:maxDate,cut:null,open:true});
+  return {cycles:out, hasCuts:cuts.length>0};
+}
+function syncEventUI(fk){
+  var host=el('evrow'); if(!host) return;
+  var cfg=CFG[fk], fn=FN[fk], ec=eventCycles(cfg.salesKey);
+  if(!ec){ host.innerHTML=''; return; }
+  if(!ec.hasCuts){ host.innerHTML='<span class="ev-lab">🎟️ Eventos</span><span class="ev-note" style="margin:0">Nenhum corte marcado na aba diária do comercial deste funil — coloque <b>"DATA EVENTO"</b> em cima da data de cada evento (linha acima das datas) que os botões aparecem aqui sozinhos no próximo refresh.</span>'; return; }
+  var act=null;
+  var chips=ec.cycles.map(function(c){
+    var on=(period==='custom'&&customRange&&customRange[0]===c.w0&&customRange[1]===c.w1); if(on)act=c;
+    var a=aggFunnel(fn,[c.w0,c.w1],false);
+    var lab=c.open?('Após '+fmtBR(addDays(c.w0,-1))):('Evento '+fmtBR(c.cut));
+    var tag=c.cur?'<span class="ev-live">● em captação</span>':(c.open?'<span class="ev-live">● próx. evento</span>':'');
+    return '<button type="button" class="ev-chip'+(on?' on':'')+((c.cur||c.open)?' live':'')+'" data-w0="'+c.w0+'" data-w1="'+c.w1+'" title="captação '+fmtBR(c.w0)+' → '+fmtBR(c.w1)+'">'
+      +'<span class="ev-t">'+lab+tag+'</span><span class="ev-s">'+money0(a.spend)+' · '+intf(a.leads)+' leads · '+fmtBR(c.w0)+'→'+fmtBR(c.w1)+'</span></button>';
+  }).join('');
+  var note= act
+    ? ('🎟️ Mostrando só o ciclo '+(act.open?('<b>após o evento de '+fmtBR(addDays(act.w0,-1))+'</b>'):('do <b>evento de '+fmtBR(act.cut)+'</b>'))+' · captação <b>'+fmtBR(act.w0)+' → '+fmtBR(act.w1)+'</b> — investimento, leads, qualificados, vendas e árvore abaixo são só desse ciclo. Clique de novo no evento pra voltar ao período todo.')
+    : 'Clique num evento pra filtrar a dash pelo ciclo daquele evento (corte a corte, pela <b>"DATA EVENTO"</b> marcada na aba diária do comercial).';
+  host.innerHTML='<span class="ev-lab">🎟️ Eventos</span>'+chips+'<div class="ev-note">'+note+'</div>';
 }
 function syncTrackUI(fn,rng,isTudo){
   var bt=el('btnTrack'); if(!bt) return;
@@ -526,7 +563,7 @@ function aggFunnel2All(fn,rng,isTudo){ var n=0; fn.daily.forEach(function(d){ if
 function renderFunnelData(fk){
   var fn=FN[fk], cfg=CFG[fk], isTudo=(period==='tudo'), rng=rangeFor(period), prng=prevRange(rng);
   var a=aggFunnel(fn,rng,isTudo), p=aggFunnel(fn,prng,false), days=daysInRange(fn,rng);
-  syncTrackUI(fn,rng,isTudo);
+  syncTrackUI(fn,rng,isTudo); syncEventUI(fk);
   var warn=el('fwarn');
   if(warn){ var notes=[];
     var est=fn.totals.leadsEst||0;
@@ -644,6 +681,8 @@ var TABS=['total','growth-all','growth-popup','growth-type','flow-all','flow-pop
 var active='total';
 function renderActive(){ if(active==='compare'){ renderCompare(); } else { renderFunnel(active); } }
 function activateTab(id){ active=id; onlyTracked=false;   // reseta o modo "so rastreados" a cada troca de aba
+  // filtro de evento e por funil: ao ir p/ outro produto (ou comparativo/visao geral) volta ao periodo todo
+  if(evPicked && (!CFG[id] || CFG[id].salesKey!==evKey)){ evPicked=false; period='tudo'; customRange=null; if(el('daterange'))syncPeriodUI(); }
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){ x.classList.toggle('active',x.getAttribute('data-tab')===id); });
   el('periods').style.visibility='visible';
   renderActive();
@@ -659,9 +698,9 @@ function syncPeriodUI(){ var rng=rangeFor(period);
   var dr=el('daterange'); if(dr)dr.classList.toggle('on',period==='custom');
   var de=el('dtDe'),at=el('dtAte'); if(de&&at){ de.value=rng[0]; at.value=rng[1]; } }
 function initPeriods(){ el('periods').innerHTML=periodsHTML();
-  Array.prototype.forEach.call(el('periods').querySelectorAll('.pbtn'),function(b){ b.addEventListener('click',function(){ period=b.getAttribute('data-k'); customRange=null; syncPeriodUI(); if(active==='compare')renderCompare(); else renderFunnelData(active); }); });
+  Array.prototype.forEach.call(el('periods').querySelectorAll('.pbtn'),function(b){ b.addEventListener('click',function(){ period=b.getAttribute('data-k'); customRange=null; evPicked=false; syncPeriodUI(); if(active==='compare')renderCompare(); else renderFunnelData(active); }); });
   var de=el('dtDe'),at=el('dtAte');
-  function onDate(){ var s=de.value,e=at.value; if(!s||!e)return; if(s>e){var t=s;s=e;e=t;} if(s<minDate)s=minDate; if(e>maxDate)e=maxDate; customRange=[s,e]; period='custom'; syncPeriodUI(); if(active==='compare')renderCompare(); else renderFunnelData(active); }
+  function onDate(){ var s=de.value,e=at.value; if(!s||!e)return; if(s>e){var t=s;s=e;e=t;} if(s<minDate)s=minDate; if(e>maxDate)e=maxDate; customRange=[s,e]; period='custom'; evPicked=false; syncPeriodUI(); if(active==='compare')renderCompare(); else renderFunnelData(active); }
   de.addEventListener('change',onDate); at.addEventListener('change',onDate); syncPeriodUI(); }
 
 function initCoverage(){ el('updated').textContent=D.generatedAtBR||'—'; if(el('taxf'))el('taxf').textContent=(D.taxMultiplier||1.1385).toFixed(4).replace('.',',');
