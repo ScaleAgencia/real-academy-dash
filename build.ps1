@@ -309,6 +309,43 @@ function Load-Cuts($csvPath){
   return [pscustomobject]@{ first=$sorted[0]; last=$sorted[-1]; cuts=@($cuts.Keys | Sort-Object) }
 }
 
+# ---- EVENTOS realizados (lista completa) pela aba Vendas (Eduzz) do workbook de leads ----
+# productName = "Real <Funil> | [Mes |] DD e DD[/MM] [de Mes] - ...". 1 evento por funil+data final.
+# Ano inferido pela data da venda (escolhe o ano que deixa o evento mais perto da venda).
+# Usado p/ o custo fixo por evento (ROAS final). So guarda funil/datas/qtde (sem PII).
+$MESES=@{ janeiro=1; fevereiro=2; marco=3; abril=4; maio=5; junho=6; julho=7; agosto=8; setembro=9; outubro=10; novembro=11; dezembro=12 }
+function Load-Events($csvPath){
+  $rows=Read-Csv $csvPath; $h=$rows[0]
+  $cP=HdrLike $h 'productname'; $cS=HdrLike $h 'invoicestatus'; $cC=HdrLike $h 'created_at'
+  if($cP -lt 0){ return @() }
+  $agg=@{}
+  for($i=1;$i -lt $rows.Count;$i++){ $r=$rows[$i]; if($cP -ge $r.Count){ continue }
+    $p=Deacc $r[$cP]
+    if($p -notmatch '^real\s+(growth|flow|build|arremate|experience)\b'){ continue }
+    $f=$Matches[1]
+    if($p -notmatch '(\d{1,2})\s*e\s*(\d{1,2})(\s*/\s*(\d{1,2}))?'){ continue }
+    $da=[int]$Matches[1]; $db=[int]$Matches[2]; $mm=0; if($Matches[4]){ $mm=[int]$Matches[4] }
+    if($mm -eq 0){ foreach($mk in $MESES.Keys){ if($p -match ('\b'+$mk+'\b')){ $mm=$MESES[$mk]; break } } }
+    if($mm -lt 1 -or $mm -gt 12){ continue }
+    $sd= if($cC -ge 0 -and $cC -lt $r.Count){ LDate $r[$cC] } else { '' }
+    if($sd -eq ''){ $sd=$TODAY }
+    $sdt=[datetime]::ParseExact($sd,'yyyy-MM-dd',$null)
+    $best=$null
+    foreach($yy in @(($sdt.Year-1),$sdt.Year,($sdt.Year+1))){
+      $cand=$null; try{ $cand=New-Object DateTime -ArgumentList $yy,$mm,$db }catch{ $cand=$null }
+      if($null -ne $cand -and ($null -eq $best -or [Math]::Abs(($cand-$sdt).TotalDays) -lt [Math]::Abs(($best-$sdt).TotalDays))){ $best=$cand } }
+    if($null -eq $best){ continue }
+    $st=$null
+    if($da -le $db){ try{ $st=New-Object DateTime -ArgumentList $best.Year,$best.Month,$da }catch{ $st=$null } }
+    else { $pm=$best.AddMonths(-1); try{ $st=New-Object DateTime -ArgumentList $pm.Year,$pm.Month,$da }catch{ $st=$null } }
+    if($null -eq $st){ continue }
+    $ek=$f+'|'+$best.ToString('yyyy-MM-dd')
+    if(-not $agg.ContainsKey($ek)){ $agg[$ek]=[pscustomobject]@{ f=$f; d1=$st.ToString('yyyy-MM-dd'); d2=$best.ToString('yyyy-MM-dd'); n=0 } }
+    if($cS -ge 0 -and $cS -lt $r.Count -and (Deacc $r[$cS]) -eq 'paid'){ $agg[$ek].n++ }
+  }
+  return @($agg.Values | Sort-Object f,d2)
+}
+
 # ---- ASCENSAO / Real Club (produto vendido dentro dos eventos) -------
 # Lista de vendas: coluna Evento diz de qual evento (funil) veio, Valor = faturamento, Data = data da venda.
 # Atribui ao funil pela 1a palavra do Evento. Ignora linhas sem valor OU sem evento valido (resumos).
@@ -337,12 +374,12 @@ function Load-Club($csvPath){
   return @($out)
 }
 
-# ---- OVERRIDE pontual de gasto (pedido do usuario) — reaproveitavel ----
-# Força um gasto FIXO na dash p/ 1 funil em 1 dia, ignorando o real. Mexe SO em sp
+# ---- OVERRIDE pontual de gasto (pedido do usuario) - reaproveitavel ----
+# Forca um gasto FIXO na dash p/ 1 funil em 1 dia, ignorando o real. Mexe SO em sp
 # (com imposto) / spr (sem imposto); leads/qualif ficam intactos. Re-escala a arvore
 # do dia proporcional ao alvo (ou injeta 1 no sintetico se nao houver gasto real).
 # $showWithTax = numero que aparece no investimento COM imposto (hero da dash).
-# Casos ativos: 15/08 Build (trava por $TODAY, ja expirou) · 28/08 Growth (persistente).
+# Casos ativos: 15/08 Build (trava por $TODAY, ja expirou) | 28/08 Growth (persistente).
 function Override-BuildSpend($fn,$date,$showWithTax){
   $rawTarget = [Math]::Round($showWithTax / $TAX, 2)
   # 1) arvore (grain Campanha>Conjunto>Anuncio): re-escala proporcional p/ somar o alvo
@@ -427,6 +464,7 @@ $qExp    = Get-Sheet $QUERIES_ID $G_Q_EXP   (Join-Path $dataDir 'q_exp.csv')
 $lExp    = Get-Sheet $LEADS_ID   $G_L_EXP_P (Join-Path $dataDir 'l_exp.csv') $true
 $cExp    = Get-Sheet $COMM_ID    $G_C_EXP   (Join-Path $dataDir 'c_exp.csv')
 $cClub   = Get-Sheet $COMM_ID    $G_C_CLUB  (Join-Path $dataDir 'c_club.csv') $true
+$lVendas = Get-Sheet $LEADS_ID   '0'        (Join-Path $dataDir 'vendas.csv') $true   # Eduzz: lista completa de eventos
 
 $gType = New-Funnel 'growth-type'  'Growth Typeform' 'growth' 'type'
 $gPop  = New-Funnel 'growth-popup' 'Growth Pop-up'   'growth' 'popup'
@@ -489,6 +527,8 @@ $cmpExpRaw = Load-Compare $cExp
 $cmpExp    = Merge-Compare $cmpExpRaw  (PlanilhaByDay $exp $null) $exp $null
 Write-Host "Ascensao (Real Club)..."
 $club = Load-Club $cClub
+Write-Host "Eventos (Eduzz)..."
+$events = Load-Events $lVendas
 
 $nowIso=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $nowBR=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'E. South America Standard Time').ToString('dd/MM/yyyy HH:mm')
@@ -508,6 +548,7 @@ $payload=[pscustomobject]@{
   }
   compare=[pscustomobject]@{ growth=@($cmpGrowth); flow=@($cmpFlow); build=@($cmpBuild); arremate=@($cmpArr); experience=@($cmpExp) }
   club=@($club)
+  events=@($events)
   cuts=[pscustomobject]@{ growth=(Load-Cuts $cGrowth); flow=(Load-Cuts $cFlow); build=(Load-Cuts $cBuild); arremate=(Load-Cuts $cArr); experience=(Load-Cuts $cExp) }
 }
 $utf8=[Text.UTF8Encoding]::new($false)

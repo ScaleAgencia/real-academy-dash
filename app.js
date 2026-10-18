@@ -150,7 +150,7 @@ function funnelShell(cfg,fn){
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Funil de captação <span class="hint">Meta Ads · imposto incluso · seta = vs. período anterior</span></div><div id="ffunnel"></div></div>'
   +'  <div class="card" style="margin-bottom:0"><div class="card-h">Leadscore — qualificação <span class="hint">A = investidor ativo + R$ 500 mil–1 mi · B = investidor ativo (qualquer capital) · qualificado = A+B</span></div><div id="fscore"></div></div>'
   +'</div>'
-  + ((cfg.isAll||cfg.standalone) ? '<div id="fsales" style="margin-top:16px"></div><div id="fclub" style="margin-top:16px"></div>' : '')
+  + ((cfg.isAll||cfg.standalone) ? '<div id="fsales" style="margin-top:16px"></div><div id="fclub" style="margin-top:16px"></div><div id="ffinal" style="margin-top:16px"></div>' : '')
   +'<div class="row-2" style="margin-top:16px">'
   +'  <div class="card"><div class="card-h">Leads por dia <span class="hint">verde/ouro = qualificado no total</span></div><div id="fchartLeads"></div></div>'
   +'  <div class="card"><div class="card-h">Investimento × CPL por dia <span class="hint">barras = gasto c/ imposto · linha = CPL</span></div><div id="fchartCpl"></div></div>'
@@ -472,7 +472,24 @@ function renderSales(cfg,rng,isTudo){
 var FUNNEL_ALLKEY={growth:'growth-all',flow:'flow-all',build:'build',arremate:'arremate',experience:'experience'};
 var FUNNEL_LABEL={growth:'Growth',flow:'Flow',build:'Build',arremate:'Arremate',experience:'Experience'};
 function clubRows(salesKey){ var all=arr(D.club); return salesKey==='__all__'?all:all.filter(function(r){return r.f===salesKey;}); }
-function clubInPeriod(r,rng,isTudo){ return isTudo || (isDate(r.d)&&inRange(r.d,rng)); }
+// Club é vendido NO evento (ou logo depois) -> com um BOTÃO DE EVENTO selecionado, cada venda conta no
+// evento de origem (funil + mês da "Origem"; sem mês = último evento iniciado até a venda), não na data.
+var MES_PT={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+function deaccJs(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
+function clubEventDate(r){
+  if(r._evd!==undefined) return r._evd;
+  var ev=arr(D.events).filter(function(e){return e.f===r.f&&isDate(e.d1)&&isDate(e.d2);}).sort(function(a,b){return a.d1.localeCompare(b.d1);});
+  var o=deaccJs(r.ev), mm=0, cand=null;
+  Object.keys(MES_PT).forEach(function(k){ if(!mm && new RegExp('\\b'+k+'\\b').test(o)) mm=MES_PT[k]; });
+  if(mm) ev.forEach(function(e){ if(+e.d2.slice(5,7)===mm && (!cand || (isDate(r.d) && Math.abs(daysBetween(e.d1,r.d))<Math.abs(daysBetween(cand.d1,r.d))))) cand=e; });
+  if(!cand && isDate(r.d)) ev.forEach(function(e){ if(e.d1<=r.d) cand=e; });
+  r._evd = cand ? cand.d1 : null; return r._evd;
+}
+function clubInPeriod(r,rng,isTudo){
+  if(isTudo) return true;
+  if(evPicked){ var d=clubEventDate(r); if(d) return inRange(d,rng); }
+  return isDate(r.d)&&inRange(r.d,rng);
+}
 function clubAgg(salesKey,rng,isTudo){ var fat=0,n=0; clubRows(salesKey).forEach(function(r){ if(clubInPeriod(r,rng,isTudo)){ fat+=r.fat||0; n+=r.n||0; } }); return {fat:fat,n:n}; }
 function investOf(salesKey,rng,isTudo){ var ak=(salesKey==='__all__')?'total':FUNNEL_ALLKEY[salesKey]; return FN[ak]?aggFunnel(FN[ak],rng,isTudo).spend:0; }
 function renderClub(cfg,rng,isTudo){
@@ -503,6 +520,63 @@ function renderClub(cfg,rng,isTudo){
     body='<div style="margin-top:6px"><div class="card-h" style="font-size:12px">Club por evento (origem)</div><div class="table-scroll"><table class="tbl"><thead><tr><th>Evento</th><th>Vendas</th><th>Faturamento</th><th>% do funil</th></tr></thead><tbody>'+tr+'</tbody></table></div></div>';
   }
   host.innerHTML='<div class="card sales-card club-card"><div class="card-h">🏛️ Ascensão · Real Club <span class="hint">'+hint+'</span></div>'+tiles+body+'</div>';
+}
+
+/* ---- ROAS FINAL: ingressos + Club − custo fixo por evento (pedido do usuário: R$ 20 mil/evento) ----
+   Eventos = lista completa do Eduzz (D.events). Período filtrado/evento: conta evento que COMEÇA no período.
+   "Tudo": janela = início do ciclo do 1º evento com venda registrada → hoje (só eventos já realizados);
+   assim não desconta evento de jan–mai cuja venda não está na dash. Visão Geral = soma dos funis. */
+var FIXED_EVENT_COST=20000;
+var FUNNEL_KEYS=['growth','flow','build','arremate','experience'];
+var MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function eventsOf(sk){ return arr(D.events).filter(function(e){return e.f===sk&&isDate(e.d1)&&isDate(e.d2);}).sort(function(a,b){return a.d2.localeCompare(b.d2);}); }
+function evLabel(e){ var a=e.d1.split('-'), b=e.d2.split('-'); return (a[1]===b[1]?(+a[2])+'–'+(+b[2]):(+a[2])+'/'+(+a[1])+'–'+(+b[2]))+' '+MES3[(+b[1])-1]; }
+function finalWindow(sk){
+  var ds=[]; salesRows(sk).forEach(function(r){ if((r.fat||0)>0) ds.push(r.d); }); clubRows(sk).forEach(function(r){ if(isDate(r.d)&&(r.fat||0)>0) ds.push(r.d); });
+  ds.sort(); var rs=ds[0]; if(!rs) return null;
+  var ev=eventsOf(sk), i0=-1; for(var i=0;i<ev.length;i++){ if(ev[i].d2>=rs){ i0=i; break; } }
+  var w0 = i0<0 ? rs : (i0>0 ? addDays(ev[i0-1].d2,1) : minDate);   // início do ciclo do 1º evento contado
+  return [w0, maxDate];
+}
+function finalCalc(sk,rng,isTudo){
+  var w = isTudo ? finalWindow(sk) : rng; if(!w) return null;
+  var ing=0; salesRows(sk).forEach(function(r){ if(inRange(r.d,w)) ing+=r.fat||0; });
+  var club=0; clubRows(sk).forEach(function(r){ if(clubInPeriod(r,w,isTudo)) club+=r.fat||0; });
+  var ak=FUNNEL_ALLKEY[sk], inv=FN[ak]?aggFunnel(FN[ak],w,false).spend:0;
+  var inWin=eventsOf(sk).filter(function(e){ return e.d1>=w[0] && e.d1<=w[1]; });
+  var evs=inWin.filter(function(e){ return e.d1<=maxDate; });      // já realizados -> custo fixo descontado
+  var fut=inWin.filter(function(e){ return e.d1>maxDate; });       // a realizar -> só listado, entra quando acontecer
+  return {sk:sk,w:w,ing:ing,club:club,inv:inv,evs:evs,fut:fut,fixo:evs.length*FIXED_EVENT_COST};
+}
+function renderFinal(cfg,rng,isTudo){
+  var host=el('ffinal'); if(!host)return;
+  var parts = cfg.salesKey==='__all__' ? FUNNEL_KEYS.map(function(k){return finalCalc(k,rng,isTudo);}).filter(Boolean) : [finalCalc(cfg.salesKey,rng,isTudo)].filter(Boolean);
+  var T={ing:0,club:0,inv:0,fixo:0,nev:0}; parts.forEach(function(p){ T.ing+=p.ing; T.club+=p.club; T.inv+=p.inv; T.fixo+=p.fixo; T.nev+=p.evs.length; });
+  var fat=T.ing+T.club, liq=fat-T.fixo, roasB=dv(fat,T.inv), roasF=dv(liq,T.inv), lucro=liq-T.inv;
+  var hint='custo fixo de '+money0(FIXED_EVENT_COST)+' por evento · ROAS final = (ingressos + Club − custos fixos) ÷ investimento em tráfego (c/ imposto) · reage ao filtro de data e aos botões de evento';
+  var hasFut=parts.some(function(p){return (p.fut||[]).length>0;});
+  if(!parts.length || (fat<=0 && T.nev===0 && !hasFut)){ host.innerHTML='<div class="card sales-card final-card"><div class="card-h">🧮 ROAS final <span class="hint">'+hint+'</span></div><div class="empty" style="padding:16px">Sem faturamento (ingressos/Club) nem evento no período.</div></div>'; return; }
+  var janela = parts.length===1 ? (fmtBR(parts[0].w[0])+' → '+fmtBR(parts[0].w[1])) : (isTudo?'janela própria de cada funil':fmtBR(rng[0])+' → '+fmtBR(rng[1]));
+  var tiles='<div class="sales-tiles">'
+    +'<div class="stile big"><div class="st-l">Faturamento total</div><div class="st-v" style="color:'+COL.gold2+'">'+money0(fat)+'</div><div class="st-s">ingressos '+money0(T.ing)+' + Club '+money0(T.club)+'</div></div>'
+    +'<div class="stile"><div class="st-l">(−) Custos fixos dos eventos</div><div class="st-v neg">'+money0(T.fixo)+'</div><div class="st-s">'+intf(T.nev)+' evento'+(T.nev===1?'':'s')+' × '+money0(FIXED_EVENT_COST)+'</div></div>'
+    +'<div class="stile"><div class="st-l">Investimento em tráfego</div><div class="st-v">'+money0(T.inv)+'</div><div class="st-s">c/ imposto · '+janela+'</div></div>'
+    +'<div class="stile"><div class="st-l">ROAS bruto</div><div class="st-v"><span class="roas-pill '+roasCls(roasB)+'">'+roasf(roasB)+'</span></div><div class="st-s">(ingressos + Club) ÷ invest.</div></div>'
+    +'<div class="stile big"><div class="st-l">ROAS final</div><div class="st-v"><span class="roas-pill '+(roasF<0?'roas-r':roasCls(roasF))+'" style="font-size:23px;padding:2px 12px">'+roasf(roasF)+'</span></div><div class="st-s">(ingressos + Club − custos fixos) ÷ invest.</div></div>'
+    +'<div class="stile"><div class="st-l">Lucro final</div><div class="st-v '+(lucro>=0?'pos':'neg')+'">'+money0(lucro)+'</div><div class="st-s">faturamento − custos fixos − tráfego</div></div>'
+    +'</div>';
+  var body='';
+  if(cfg.salesKey==='__all__'){
+    var tr=parts.map(function(p){ var f=p.ing+p.club, rf=dv(f-p.fixo,p.inv), lc=f-p.fixo-p.inv;
+      return '<tr><td><span class="tdot '+(CMP_META[p.sk]?CMP_META[p.sk].dot:'g')+'"></span> '+esc(FUNNEL_LABEL[p.sk]||p.sk)+'</td><td class="num">'+intf(p.evs.length)+'</td><td class="num" style="color:'+COL.gold2+'">'+money0(f)+'</td><td class="num neg">'+money0(p.fixo)+'</td><td class="num">'+money0(p.inv)+'</td><td class="num"><span class="roas-pill '+(rf<0?'roas-r':roasCls(rf))+'">'+roasf(rf)+'</span></td><td class="num '+(lc>=0?'pos':'neg')+'">'+money0(lc)+'</td></tr>'; }).join('');
+    body='<div style="margin-top:6px"><div class="card-h" style="font-size:12px">ROAS final por funil'+(isTudo?' <span class="hint">cada funil na sua janela: do ciclo do 1º evento com venda até hoje</span>':'')+'</div><div class="table-scroll"><table class="tbl"><thead><tr><th>Funil</th><th>Eventos</th><th>Faturamento</th><th>Custo fixo</th><th>Investimento</th><th>ROAS final</th><th>Lucro final</th></tr></thead><tbody>'+tr+'</tbody>'
+      +'<tfoot><tr><td>Total</td><td class="num">'+intf(T.nev)+'</td><td class="num">'+money0(fat)+'</td><td class="num">'+money0(T.fixo)+'</td><td class="num">'+money0(T.inv)+'</td><td class="num">'+roasf(roasF)+'</td><td class="num">'+money0(lucro)+'</td></tr></tfoot></table></div></div>';
+  }
+  var evl=[], pre=function(p){ return cfg.salesKey==='__all__'?esc(FUNNEL_LABEL[p.sk]||p.sk)+' · ':''; };
+  parts.forEach(function(p){ p.evs.forEach(function(e){ evl.push('<span class="fe-chip">'+pre(p)+evLabel(e)+'</span>'); }); });
+  parts.forEach(function(p){ (p.fut||[]).forEach(function(e){ evl.push('<span class="fe-chip fut" title="evento ainda não aconteceu: o custo fixo entra quando ele for realizado">'+pre(p)+evLabel(e)+' · a realizar (ainda não descontado)</span>'); }); });
+  var evrow='<div class="fe-list"><span class="fe-lab">Eventos contados no custo fixo:</span>'+(evl.length?evl.join(''):'<span class="fe-none">nenhum evento no período</span>')+'</div>';
+  host.innerHTML='<div class="card sales-card final-card"><div class="card-h">🧮 ROAS final — ingressos + Club − custo fixo dos eventos <span class="hint">'+hint+'</span></div>'+tiles+evrow+body+'</div>';
 }
 
 /* ---- funnel orchestration ---- */
@@ -544,7 +618,7 @@ function syncEventUI(fk){
       +'<span class="ev-t">'+lab+tag+'</span><span class="ev-s">'+money0(a.spend)+' · '+intf(a.leads)+' leads · '+fmtBR(c.w0)+'→'+fmtBR(c.w1)+'</span></button>';
   }).join('');
   var note= act
-    ? ('🎟️ Mostrando só o ciclo '+(act.open?('<b>após o evento de '+fmtBR(addDays(act.w0,-1))+'</b>'):('do <b>evento de '+fmtBR(act.cut)+'</b>'))+' · captação <b>'+fmtBR(act.w0)+' → '+fmtBR(act.w1)+'</b> — investimento, leads, qualificados, vendas e árvore abaixo são só desse ciclo. Clique de novo no evento pra voltar ao período todo.')
+    ? ('🎟️ Mostrando só o ciclo '+(act.open?('<b>após o evento de '+fmtBR(addDays(act.w0,-1))+'</b>'):('do <b>evento de '+fmtBR(act.cut)+'</b>'))+' · captação <b>'+fmtBR(act.w0)+' → '+fmtBR(act.w1)+'</b> — investimento, leads, qualificados, ingressos e árvore abaixo são só desse ciclo; o Club (ascensão) conta pelo evento de origem. Clique de novo no evento pra voltar ao período todo.')
     : 'Clique num evento pra filtrar a dash pelo ciclo daquele evento (corte a corte, pela <b>"DATA EVENTO"</b> marcada na aba diária do comercial).';
   host.innerHTML='<span class="ev-lab">🎟️ Eventos</span>'+chips+'<div class="ev-note">'+note+'</div>';
 }
@@ -575,7 +649,7 @@ function renderFunnelData(fk){
   var sInfo=salesAgg(cfg.salesKey,rng,isTudo);
   var prodLeads=(FN[cfg.allKey]?aggFunnel(FN[cfg.allKey],rng,isTudo).leads:a.leads);
   renderKpi(cfg,fn,a,p); renderFunnelViz(cfg,a,p,{ing:sInfo.ing,prodLeads:prodLeads}); renderScore(cfg,fn,a);
-  if(cfg.isAll||cfg.standalone){ renderSales(cfg,rng,isTudo); renderClub(cfg,rng,isTudo); }
+  if(cfg.isAll||cfg.standalone){ renderSales(cfg,rng,isTudo); renderClub(cfg,rng,isTudo); renderFinal(cfg,rng,isTudo); }
   renderChartLeads(cfg,days); renderChartCpl(cfg,days); renderDist(cfg,fn);
   renderInsights(cfg,fn,rng,isTudo); renderDaily(cfg,fn,rng); renderTree(cfg,fn,rng,isTudo);
 }

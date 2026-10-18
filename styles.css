@@ -191,6 +191,12 @@ b{font-weight:700}
 .roas-n{color:var(--muted2)}
 .sales-card{border-color:rgba(217,180,90,.28)}
 .club-card{border-color:rgba(217,180,90,.28);border-top:3px solid var(--gold)}
+.final-card{border-color:rgba(47,227,160,.30);border-top:3px solid var(--green)}
+.fe-list{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 6px;font-size:12px}
+.fe-lab{color:var(--muted);margin-right:2px}
+.fe-chip{background:rgba(217,180,90,.10);border:1px solid rgba(217,180,90,.35);color:var(--gold2);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.fe-chip.fut{border-style:dashed;opacity:.8}
+.fe-none{color:var(--muted2)}
 .sales-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:12px}
 @media(max-width:900px){.sales-tiles{grid-template-columns:repeat(2,1fr)}}
 .stile{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:11px 12px}
