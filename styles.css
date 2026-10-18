@@ -196,6 +196,7 @@ b{font-weight:700}
 .fe-lab{color:var(--muted);margin-right:2px}
 .fe-chip{background:rgba(217,180,90,.10);border:1px solid rgba(217,180,90,.35);color:var(--gold2);border-radius:999px;padding:2px 9px;white-space:nowrap}
 .fe-chip.fut{border-style:dashed;opacity:.8}
+.fe-chip.edz{border-style:dotted}
 .fe-none{color:var(--muted2)}
 .sales-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:12px}
 @media(max-width:900px){.sales-tiles{grid-template-columns:repeat(2,1fr)}}

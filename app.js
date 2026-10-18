@@ -478,7 +478,7 @@ var MES_PT={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:
 function deaccJs(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
 function clubEventDate(r){
   if(r._evd!==undefined) return r._evd;
-  var ev=arr(D.events).filter(function(e){return e.f===r.f&&isDate(e.d1)&&isDate(e.d2);}).sort(function(a,b){return a.d1.localeCompare(b.d1);});
+  var ev=eventsOf(r.f);
   var o=deaccJs(r.ev), mm=0, cand=null;
   Object.keys(MES_PT).forEach(function(k){ if(!mm && new RegExp('\\b'+k+'\\b').test(o)) mm=MES_PT[k]; });
   if(mm) ev.forEach(function(e){ if(+e.d2.slice(5,7)===mm && (!cand || (isDate(r.d) && Math.abs(daysBetween(e.d1,r.d))<Math.abs(daysBetween(cand.d1,r.d))))) cand=e; });
@@ -529,7 +529,21 @@ function renderClub(cfg,rng,isTudo){
 var FIXED_EVENT_COST=20000;
 var FUNNEL_KEYS=['growth','flow','build','arremate','experience'];
 var MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-function eventsOf(sk){ return arr(D.events).filter(function(e){return e.f===sk&&isDate(e.d1)&&isDate(e.d2);}).sort(function(a,b){return a.d2.localeCompare(b.d2);}); }
+// Lista de eventos do funil (custo fixo + atribuição do Club). FONTE = "DATA EVENTO" do comercial (mesma dos botões).
+// Onde o comercial não cobre: eventos do Eduzz ANTES da 1ª data da aba (ex. Experience jun) ou funil sem nenhum
+// corte marcado (Build) -> src:'eduzz' (marcado na tela). Assim nenhum evento realizado fica sem os R$ 20 mil.
+var _evCache={};
+function eventsOf(sk){
+  if(_evCache[sk]) return _evCache[sk];
+  var c=(D.cuts||{})[sk], ed=arr(D.events).filter(function(e){return e.f===sk&&isDate(e.d1)&&isDate(e.d2);});
+  var cuts=(c&&isDate(c.first))?arr(c.cuts).filter(isDate):[], out=[];
+  if(cuts.length){
+    cuts.forEach(function(d){ var m=ed.filter(function(e){return e.d1===d;})[0]; out.push({f:sk,d1:d,d2:m?m.d2:addDays(d,1),src:'comercial'}); });
+    ed.forEach(function(e){ if(e.d1<c.first) out.push({f:sk,d1:e.d1,d2:e.d2,src:'eduzz'}); });
+  } else { ed.forEach(function(e){ out.push({f:sk,d1:e.d1,d2:e.d2,src:'eduzz'}); }); }
+  _evCache[sk]=out.sort(function(a,b){return a.d1.localeCompare(b.d1);});
+  return _evCache[sk];
+}
 function evLabel(e){ var a=e.d1.split('-'), b=e.d2.split('-'); return (a[1]===b[1]?(+a[2])+'–'+(+b[2]):(+a[2])+'/'+(+a[1])+'–'+(+b[2]))+' '+MES3[(+b[1])-1]; }
 function finalWindow(sk){
   var ds=[]; salesRows(sk).forEach(function(r){ if((r.fat||0)>0) ds.push(r.d); }); clubRows(sk).forEach(function(r){ if(isDate(r.d)&&(r.fat||0)>0) ds.push(r.d); });
@@ -553,7 +567,7 @@ function renderFinal(cfg,rng,isTudo){
   var parts = cfg.salesKey==='__all__' ? FUNNEL_KEYS.map(function(k){return finalCalc(k,rng,isTudo);}).filter(Boolean) : [finalCalc(cfg.salesKey,rng,isTudo)].filter(Boolean);
   var T={ing:0,club:0,inv:0,fixo:0,nev:0}; parts.forEach(function(p){ T.ing+=p.ing; T.club+=p.club; T.inv+=p.inv; T.fixo+=p.fixo; T.nev+=p.evs.length; });
   var fat=T.ing+T.club, liq=fat-T.fixo, roasB=dv(fat,T.inv), roasF=dv(liq,T.inv), lucro=liq-T.inv;
-  var hint='custo fixo de '+money0(FIXED_EVENT_COST)+' por evento · ROAS final = (ingressos + Club − custos fixos) ÷ investimento em tráfego (c/ imposto) · reage ao filtro de data e aos botões de evento';
+  var hint='custo fixo de '+money0(FIXED_EVENT_COST)+' por evento (eventos = "DATA EVENTO" do comercial) · ROAS final = (ingressos + Club − custos fixos) ÷ investimento em tráfego (c/ imposto) · reage ao filtro de data e aos botões de evento';
   var hasFut=parts.some(function(p){return (p.fut||[]).length>0;});
   if(!parts.length || (fat<=0 && T.nev===0 && !hasFut)){ host.innerHTML='<div class="card sales-card final-card"><div class="card-h">🧮 ROAS final <span class="hint">'+hint+'</span></div><div class="empty" style="padding:16px">Sem faturamento (ingressos/Club) nem evento no período.</div></div>'; return; }
   var janela = parts.length===1 ? (fmtBR(parts[0].w[0])+' → '+fmtBR(parts[0].w[1])) : (isTudo?'janela própria de cada funil':fmtBR(rng[0])+' → '+fmtBR(rng[1]));
@@ -573,9 +587,10 @@ function renderFinal(cfg,rng,isTudo){
       +'<tfoot><tr><td>Total</td><td class="num">'+intf(T.nev)+'</td><td class="num">'+money0(fat)+'</td><td class="num">'+money0(T.fixo)+'</td><td class="num">'+money0(T.inv)+'</td><td class="num">'+roasf(roasF)+'</td><td class="num">'+money0(lucro)+'</td></tr></tfoot></table></div></div>';
   }
   var evl=[], pre=function(p){ return cfg.salesKey==='__all__'?esc(FUNNEL_LABEL[p.sk]||p.sk)+' · ':''; };
-  parts.forEach(function(p){ p.evs.forEach(function(e){ evl.push('<span class="fe-chip">'+pre(p)+evLabel(e)+'</span>'); }); });
+  var anyEdz=false;
+  parts.forEach(function(p){ p.evs.forEach(function(e){ var z=e.src==='eduzz'; if(z)anyEdz=true; evl.push('<span class="fe-chip'+(z?' edz':'')+'"'+(z?' title="sem DATA EVENTO no comercial p/ este evento -> data do Eduzz"':'')+'>'+pre(p)+evLabel(e)+(z?'*':'')+'</span>'); }); });
   parts.forEach(function(p){ (p.fut||[]).forEach(function(e){ evl.push('<span class="fe-chip fut" title="evento ainda não aconteceu: o custo fixo entra quando ele for realizado">'+pre(p)+evLabel(e)+' · a realizar (ainda não descontado)</span>'); }); });
-  var evrow='<div class="fe-list"><span class="fe-lab">Eventos contados no custo fixo:</span>'+(evl.length?evl.join(''):'<span class="fe-none">nenhum evento no período</span>')+'</div>';
+  var evrow='<div class="fe-list"><span class="fe-lab">Eventos contados no custo fixo:</span>'+(evl.length?evl.join(''):'<span class="fe-none">nenhum evento no período</span>')+(anyEdz?'<span class="fe-none">* evento sem "DATA EVENTO" na aba do comercial (fora da cobertura da aba ou funil sem corte marcado) → data do Eduzz</span>':'')+'</div>';
   host.innerHTML='<div class="card sales-card final-card"><div class="card-h">🧮 ROAS final — ingressos + Club − custo fixo dos eventos <span class="hint">'+hint+'</span></div>'+tiles+evrow+body+'</div>';
 }
 
